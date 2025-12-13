@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Login</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <div class="card">
+    <h2>MiniFacebook</h2>
+    <p style="color:#666;">Inicia sesión</p>
+
+    <input type="email" id="email" placeholder="Correo">
+    <input type="password" id="password" placeholder="Contraseña">
+
+    <button onclick="login()">Entrar</button>
+
+    <p id="msg" style="color:red;"></p>
+
+    <p>
+      ¿No tienes cuenta?
+      <a href="/register.html">Regístrate</a>
+    </p>
+  </div>
+
+  <script>
+    function login() {
+      fetch("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.value,
+          password: password.value
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.token) {
+          msg.style.color = "green";
+          msg.innerText = "Login exitoso 🔥";
+          localStorage.setItem("token", data.token);
+        } else {
+          msg.style.color = "red";
+          msg.innerText = data.error;
+        }
+      });
+    }
+  </script>
+
+</body>
+</html>

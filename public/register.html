@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Registro</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <div class="card">
+    <h2>MiniFacebook</h2>
+    <p style="margin-bottom:15px;color:#666;">Crea tu cuenta</p>
+
+    <input type="text" id="name" placeholder="Nombre completo">
+    <input type="email" id="email" placeholder="Correo">
+    <input type="password" id="password" placeholder="Contraseña">
+
+    <button onclick="register()">Registrarse</button>
+
+    <p id="msg"></p>
+
+    <p style="margin-top:15px;font-size:14px;">
+      ¿Ya tienes cuenta?
+      <a href="/login.html" style="color:#1877f2;text-decoration:none;">
+        Inicia sesión
+      </a>
+    </p>
+  </div>
+
+  <script>
+    function register() {
+      fetch("/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: document.getElementById("name").value,
+          email: document.getElementById("email").value,
+          password: document.getElementById("password").value
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        document.getElementById("msg").innerText =
+          data.message || data.error;
+      });
+    }
+  </script>
+
+</body>
+</html>
