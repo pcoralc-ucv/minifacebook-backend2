@@ -7,42 +7,63 @@ import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import { fileURLToPath } from "url";
 
+/* ======================
+   PATH CONFIG
+====================== */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/* ======================
+   APP
+====================== */
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// ======================
-// CONFIG
-// ======================
-const BASE_URL = process.env.BASE_URL;
+/* ======================
+   ENV VALIDATION
+====================== */
+const {
+  BASE_URL,
+  SENDGRID_API_KEY,
+  MAIL_FROM,
+  DB_HOST,
+  DB_USER,
+  DB_PASS,
+  DB_NAME,
+  DB_PORT,
+  JWT_SECRET,
+} = process.env;
 
-// ======================
-// SENDGRID
-// ======================
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+if (!BASE_URL || !SENDGRID_API_KEY || !MAIL_FROM) {
+  console.error("? Faltan variables de entorno críticas");
+  process.exit(1);
+}
 
-// ======================
-// DB
-// ======================
+/* ======================
+   SENDGRID
+====================== */
+sgMail.setApiKey(SENDGRID_API_KEY);
+
+/* ======================
+   DB
+====================== */
 const db = await mysql.createPool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASS,
-  database: process.env.DB_NAME,
-  port: process.env.DB_PORT,
+  host: DB_HOST,
+  user: DB_USER,
+  password: DB_PASS,
+  database: DB_NAME,
+  port: DB_PORT || 3306,
 });
 
-// ======================
-// ROUTES
-// ======================
+/* ======================
+   ROUTES
+====================== */
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "login.html"));
 });
 
-// -------- REGISTER --------
+/* -------- REGISTER -------- */
 app.post("/register", async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -51,36 +72,35 @@ app.post("/register", async (req, res) => {
       return res.status(400).json({ error: "Campos incompletos" });
     }
 
-    // Â¿Existe usuario?
+    // ¿Existe usuario?
     const [existing] = await db.query(
       "SELECT verified, verify_token FROM users WHERE email=?",
       [email]
     );
 
-    // Si existe y no estÃ¡ verificado â†’ reenviar correo
+    // Existe pero no verificado ? reenviar correo
     if (existing.length > 0 && !existing[0].verified) {
-      const token = existing[0].verify_token;
-      const link = `${BASE_URL}/verify?token=${token}`;
+      const link = `${BASE_URL}/verify?token=${existing[0].verify_token}`;
 
       await sgMail.send({
         to: email,
-        from: process.env.MAIL_FROM,
+        from: MAIL_FROM,
         subject: "Verifica tu cuenta",
         html: `
-          <h2>VerificaciÃ³n pendiente</h2>
+          <h2>Verificación pendiente</h2>
           <p>Haz clic para verificar tu cuenta:</p>
           <a href="${link}">Verificar cuenta</a>
         `,
       });
 
       return res.json({
-        msg: "Correo ya registrado. Se reenvi\u00f3 el correo de verificaciÃ³n.",
+        msg: "Correo ya registrado. Se reenvi´o el correo de verificación.",
       });
     }
 
-    // Si ya estÃ¡ verificado
+    // Ya verificado
     if (existing.length > 0) {
-      return res.status(400).json({ error: "El correo ya estÃ¡ registrado" });
+      return res.status(400).json({ error: "El correo ya está registrado" });
     }
 
     // Registrar nuevo
@@ -96,8 +116,8 @@ app.post("/register", async (req, res) => {
 
     await sgMail.send({
       to: email,
-      from: process.env.MAIL_FROM,
-      subject: "Bienvenido a MiniFacebook - Verifica tu cuenta",
+      from: MAIL_FROM,
+      subject: "Bienvenido a MiniFacebook",
       html: `
         <h2>Bienvenido a MiniFacebook</h2>
         <p>Haz clic para verificar tu cuenta:</p>
@@ -107,12 +127,12 @@ app.post("/register", async (req, res) => {
 
     res.json({ msg: "Usuario registrado. Revisa tu correo." });
   } catch (err) {
-    console.error("âŒ Error register:", err);
+    console.error("? Error register:", err.response?.body || err);
     res.status(500).json({ error: "Error al registrar usuario" });
   }
 });
 
-// -------- VERIFY --------
+/* -------- VERIFY -------- */
 app.get("/verify", async (req, res) => {
   const { token } = req.query;
 
@@ -122,13 +142,13 @@ app.get("/verify", async (req, res) => {
   );
 
   if (result.affectedRows === 0) {
-    return res.send("âŒ Token invÃ¡lido o expirado");
+    return res.send("? Token inválido o expirado");
   }
 
-  res.send("âœ… Cuenta verificada. Ya puedes iniciar sesiÃ³n.");
+  res.send("? Cuenta verificada. Ya puedes iniciar sesión.");
 });
 
-// -------- LOGIN --------
+/* -------- LOGIN -------- */
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
@@ -147,22 +167,22 @@ app.post("/login", async (req, res) => {
 
   const ok = await bcrypt.compare(password, rows[0].password);
   if (!ok) {
-    return res.status(400).json({ error: "ContraseÃ±a incorrecta" });
+    return res.status(400).json({ error: "Contraseña incorrecta" });
   }
 
   const token = jwt.sign(
     { id: rows[0].id },
-    process.env.JWT_SECRET,
+    JWT_SECRET,
     { expiresIn: "1h" }
   );
 
   res.json({ token });
 });
 
-// ======================
-// SERVER
-// ======================
+/* ======================
+   SERVER
+====================== */
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () =>
-  console.log(`ðŸ”¥ API corriendo en puerto ${PORT}`)
-);
+app.listen(PORT, () => {
+  console.log(`?? API corriendo en puerto ${PORT}`);
+});
