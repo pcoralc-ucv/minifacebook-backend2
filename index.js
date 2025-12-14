@@ -52,10 +52,46 @@ app.get("/", (req, res) => {
 app.post("/register", async (req, res) => {
   try {
     const { name, email, password } = req.body;
+
     if (!name || !email || !password) {
       return res.status(400).json({ error: "Campos incompletos" });
     }
 
+    // 1?? Verificar si ya existe
+    const [existing] = await db.query(
+      "SELECT verified, verify_token FROM users WHERE email=?",
+      [email]
+    );
+
+    if (existing.length > 0) {
+      // Si existe pero NO está verificado ? reenviar correo
+      if (!existing[0].verified) {
+        const token = existing[0].verify_token;
+        const link = `${process.env.BASE_URL}/verify?token=${token}`;
+
+        await transporter.sendMail({
+          from: `"MiniFacebook" <${process.env.MAIL_USER}>`,
+          to: email,
+          subject: "Verifica tu cuenta",
+          html: `
+            <h2>Verificación pendiente</h2>
+            <p>Haz clic para verificar tu cuenta:</p>
+            <a href="${link}">Verificar cuenta</a>
+          `,
+        });
+
+        return res.json({
+          msg: "El correo ya estaba registrado. Se reenvi\u00f3 el correo de verificación.",
+        });
+      }
+
+      // Si ya está verificado
+      return res
+        .status(400)
+        .json({ error: "El correo ya está registrado" });
+    }
+
+    // 2?? Registrar nuevo usuario
     const hashedPass = await bcrypt.hash(password, 10);
     const verifyToken = uuidv4();
 
@@ -64,7 +100,7 @@ app.post("/register", async (req, res) => {
       [name, email, hashedPass, verifyToken]
     );
 
-    const link = `${BASE_URL}/verify?token=${verifyToken}`;
+    const link = `${process.env.BASE_URL}/verify?token=${verifyToken}`;
 
     await transporter.sendMail({
       from: `"MiniFacebook" <${process.env.MAIL_USER}>`,
@@ -80,10 +116,9 @@ app.post("/register", async (req, res) => {
     res.json({ msg: "Usuario registrado. Revisa tu correo." });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Error al registrar" });
+    res.status(500).json({ error: "Error al registrar usuario" });
   }
 });
-
 // -------- VERIFY --------
 app.get("/verify", async (req, res) => {
   const { token } = req.query;
