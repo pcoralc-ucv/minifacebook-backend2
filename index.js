@@ -102,16 +102,22 @@ app.post("/register", async (req, res) => {
 
     const link = `${process.env.BASE_URL}/verify?token=${verifyToken}`;
 
-    await transporter.sendMail({
-      from: `"MiniFacebook" <${process.env.MAIL_USER}>`,
-      to: email,
-      subject: "Verifica tu cuenta",
-      html: `
-        <h2>Bienvenido a MiniFacebook</h2>
-        <p>Haz clic para verificar tu cuenta:</p>
-        <a href="${link}">Verificar cuenta</a>
-      `,
-    });
+   try {
+  await transporter.sendMail({
+    from: `"MiniFacebook" <${process.env.MAIL_USER}>`,
+    to: email,
+    subject: "Verifica tu cuenta",
+    html: `
+      <h2>Bienvenido a MiniFacebook</h2>
+      <p>Haz clic para verificar tu cuenta:</p>
+      <a href="${link}">Verificar cuenta</a>
+    `,
+  });
+
+  console.log("?? Correo enviado a", email);
+} catch (mailError) {
+  console.error("? Error enviando correo:", mailError);
+}
 
     res.json({ msg: "Usuario registrado. Revisa tu correo." });
   } catch (err) {
