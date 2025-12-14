@@ -27,15 +27,23 @@ const {
   BASE_URL,
   SENDGRID_API_KEY,
   MAIL_FROM,
-  DB_HOST,
-  DB_USER,
-  DB_PASS,
-  DB_NAME,
-  DB_PORT,
   JWT_SECRET,
+  MYSQLHOST,
+  MYSQLUSER,
+  MYSQLPASSWORD,
+  MYSQLDATABASE,
+  MYSQLPORT,
 } = process.env;
 
-if (!BASE_URL || !SENDGRID_API_KEY || !MAIL_FROM) {
+if (
+  !BASE_URL ||
+  !SENDGRID_API_KEY ||
+  !MAIL_FROM ||
+  !MYSQLHOST ||
+  !MYSQLUSER ||
+  !MYSQLPASSWORD ||
+  !MYSQLDATABASE
+) {
   console.error("? Faltan variables de entorno críticas");
   process.exit(1);
 }
