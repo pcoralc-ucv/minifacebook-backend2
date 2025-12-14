@@ -2,7 +2,7 @@ import express from "express";
 import mysql from "mysql2/promise";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import nodemailer from "nodemailer";
+import sgMail from "@sendgrid/mail";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -17,18 +17,12 @@ app.use(express.static(path.join(__dirname, "public")));
 // ======================
 // CONFIG
 // ======================
-const BASE_URL = process.env.BASE_URL; // https://tu-app.onrender.com
+const BASE_URL = process.env.BASE_URL;
 
 // ======================
-// MAIL
+// SENDGRID
 // ======================
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
-  },
-});
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // ======================
 // DB
@@ -57,41 +51,39 @@ app.post("/register", async (req, res) => {
       return res.status(400).json({ error: "Campos incompletos" });
     }
 
-    // 1?? Verificar si ya existe
+    // Â¿Existe usuario?
     const [existing] = await db.query(
       "SELECT verified, verify_token FROM users WHERE email=?",
       [email]
     );
 
-    if (existing.length > 0) {
-      // Si existe pero NO está verificado ? reenviar correo
-      if (!existing[0].verified) {
-        const token = existing[0].verify_token;
-        const link = `${process.env.BASE_URL}/verify?token=${token}`;
+    // Si existe y no estÃ¡ verificado â†’ reenviar correo
+    if (existing.length > 0 && !existing[0].verified) {
+      const token = existing[0].verify_token;
+      const link = `${BASE_URL}/verify?token=${token}`;
 
-        await transporter.sendMail({
-          from: `"MiniFacebook" <${process.env.MAIL_USER}>`,
-          to: email,
-          subject: "Verifica tu cuenta",
-          html: `
-            <h2>Verificación pendiente</h2>
-            <p>Haz clic para verificar tu cuenta:</p>
-            <a href="${link}">Verificar cuenta</a>
-          `,
-        });
+      await sgMail.send({
+        to: email,
+        from: process.env.MAIL_FROM,
+        subject: "Verifica tu cuenta",
+        html: `
+          <h2>VerificaciÃ³n pendiente</h2>
+          <p>Haz clic para verificar tu cuenta:</p>
+          <a href="${link}">Verificar cuenta</a>
+        `,
+      });
 
-        return res.json({
-          msg: "El correo ya estaba registrado. Se reenvi\u00f3 el correo de verificación.",
-        });
-      }
-
-      // Si ya está verificado
-      return res
-        .status(400)
-        .json({ error: "El correo ya está registrado" });
+      return res.json({
+        msg: "Correo ya registrado. Se reenvi\u00f3 el correo de verificaciÃ³n.",
+      });
     }
 
-    // 2?? Registrar nuevo usuario
+    // Si ya estÃ¡ verificado
+    if (existing.length > 0) {
+      return res.status(400).json({ error: "El correo ya estÃ¡ registrado" });
+    }
+
+    // Registrar nuevo
     const hashedPass = await bcrypt.hash(password, 10);
     const verifyToken = uuidv4();
 
@@ -100,31 +92,26 @@ app.post("/register", async (req, res) => {
       [name, email, hashedPass, verifyToken]
     );
 
-    const link = `${process.env.BASE_URL}/verify?token=${verifyToken}`;
+    const link = `${BASE_URL}/verify?token=${verifyToken}`;
 
-   try {
-  await transporter.sendMail({
-    from: `"MiniFacebook" <${process.env.MAIL_USER}>`,
-    to: email,
-    subject: "Verifica tu cuenta",
-    html: `
-      <h2>Bienvenido a MiniFacebook</h2>
-      <p>Haz clic para verificar tu cuenta:</p>
-      <a href="${link}">Verificar cuenta</a>
-    `,
-  });
-
-  console.log("?? Correo enviado a", email);
-} catch (mailError) {
-  console.error("? Error enviando correo:", mailError);
-}
+    await sgMail.send({
+      to: email,
+      from: process.env.MAIL_FROM,
+      subject: "Bienvenido a MiniFacebook - Verifica tu cuenta",
+      html: `
+        <h2>Bienvenido a MiniFacebook</h2>
+        <p>Haz clic para verificar tu cuenta:</p>
+        <a href="${link}">Verificar cuenta</a>
+      `,
+    });
 
     res.json({ msg: "Usuario registrado. Revisa tu correo." });
   } catch (err) {
-    console.error(err);
+    console.error("âŒ Error register:", err);
     res.status(500).json({ error: "Error al registrar usuario" });
   }
 });
+
 // -------- VERIFY --------
 app.get("/verify", async (req, res) => {
   const { token } = req.query;
@@ -135,10 +122,10 @@ app.get("/verify", async (req, res) => {
   );
 
   if (result.affectedRows === 0) {
-    return res.send("? Token inválido o expirado");
+    return res.send("âŒ Token invÃ¡lido o expirado");
   }
 
-  res.send("? Cuenta verificada. Ya puedes iniciar sesión.");
+  res.send("âœ… Cuenta verificada. Ya puedes iniciar sesiÃ³n.");
 });
 
 // -------- LOGIN --------
@@ -160,7 +147,7 @@ app.post("/login", async (req, res) => {
 
   const ok = await bcrypt.compare(password, rows[0].password);
   if (!ok) {
-    return res.status(400).json({ error: "Contraseña incorrecta" });
+    return res.status(400).json({ error: "ContraseÃ±a incorrecta" });
   }
 
   const token = jwt.sign(
@@ -177,5 +164,5 @@ app.post("/login", async (req, res) => {
 // ======================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>
-  console.log(`?? API corriendo en puerto ${PORT}`)
+  console.log(`ðŸ”¥ API corriendo en puerto ${PORT}`)
 );
