@@ -19,7 +19,7 @@ const db = await mysql.createPool({
 
 // 📌 Ruta raíz — evita el "Cannot GET /"
 app.get("/", (req, res) => {
-  res.send("🚀 MiniFacebook API funcionando");
+  res.sendFile(__dirname + "/public/login.html");
 });
 
 // 📌 Registro
