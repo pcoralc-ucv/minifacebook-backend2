@@ -4,7 +4,11 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import { v4 as uuidv4 } from "uuid";
+import path from "path";
+import { fileURLToPath } from "url";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 
@@ -19,7 +23,7 @@ const db = await mysql.createPool({
 
 // 📌 Ruta raíz — evita el "Cannot GET /"
 app.get("/", (req, res) => {
-  res.sendFile(__dirname + "/public/login.html");
+  res.sendFile(path.join(__dirname, "public", "login.html"));
 });
 
 // 📌 Registro
