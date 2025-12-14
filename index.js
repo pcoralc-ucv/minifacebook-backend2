@@ -14,6 +14,16 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 
+// ?? Configurar Nodemailer
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.MAIL_USER,  // tu correo
+    pass: process.env.MAIL_PASS   // tu app password
+  }
+});
+
+
 // 📌 Conexión MySQL (Railway)
 const db = await mysql.createPool({
   host: process.env.DB_HOST,
