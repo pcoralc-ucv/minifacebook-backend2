@@ -1,15 +1,11 @@
 {
   "name": "facebook-server",
   "version": "1.0.0",
-  "description": "MiniFacebook Backend",
   "type": "module",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
     "@sendgrid/mail": "^8.1.6",
     "bcrypt": "^6.0.0",
