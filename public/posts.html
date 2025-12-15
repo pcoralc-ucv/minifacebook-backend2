@@ -16,7 +16,7 @@
 
     .overlay {
       min-height: 100vh;
-      background: rgba(240, 242, 245, 0.85);
+      background: rgba(240, 242, 245, 0.88);
       padding: 30px 0;
     }
 
@@ -25,12 +25,17 @@
       margin: auto;
     }
 
+    /* ===== POST BOX (STICKY) ===== */
     .post-box {
+      position: sticky;
+      top: 20px;
+      z-index: 10;
+
       background: #fff;
       padding: 15px;
       border-radius: 10px;
       margin-bottom: 20px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
     }
 
     .post-box h3 {
@@ -44,6 +49,7 @@
       resize: none;
       border: 1px solid #ccc;
       margin-bottom: 10px;
+      font-size: 14px;
     }
 
     input[type="file"] {
@@ -57,6 +63,7 @@
       padding: 8px 14px;
       border-radius: 6px;
       cursor: pointer;
+      font-weight: bold;
     }
 
     button:hover {
@@ -66,6 +73,13 @@
     .logout {
       background: #e53935;
       float: right;
+    }
+
+    /* ===== FEED ===== */
+    #feed {
+      max-height: calc(100vh - 220px);
+      overflow-y: auto;
+      padding-right: 5px;
     }
 
     .post {
@@ -93,20 +107,20 @@
 <div class="overlay">
   <div class="container">
 
-    <!-- CREAR POST -->
+    <!-- ===== CREAR POST ===== -->
     <div class="post-box">
       <button class="logout" onclick="logout()">Salir</button>
       <h3>MiniFacebook</h3>
 
-      <textarea id="text" rows="3" placeholder="¿Qué estás pensando?"></textarea>
+      <textarea id="text" rows="3" placeholder="Â¿QuÃ© estÃ¡s pensando?"></textarea>
 
-      <!-- ?? CLAVE: name="image" -->
+      <!-- ðŸ”¥ INPUT CORRECTO -->
       <input type="file" id="image" name="image" accept="image/*">
 
       <button type="button" onclick="createPost()">Publicar</button>
     </div>
 
-    <!-- FEED -->
+    <!-- ===== FEED ===== -->
     <div id="feed"></div>
 
   </div>
@@ -126,7 +140,8 @@
 
   function createPost() {
     const text = document.getElementById("text").value;
-    const image = document.getElementById("image").files[0];
+    const imageInput = document.getElementById("image");
+    const image = imageInput.files[0];
 
     if (!text && !image) {
       alert("Escribe algo o sube una imagen");
@@ -145,10 +160,16 @@
       body: formData
     })
     .then(res => res.json())
-    .then(() => {
+    .then(data => {
+      if (!data.success) {
+        alert(data.message || "Error al publicar");
+        return;
+      }
+
       document.getElementById("text").value = "";
-      document.getElementById("image").value = "";
+      imageInput.value = "";
       loadPosts();
+
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
   }
@@ -171,7 +192,7 @@
           <strong>${p.name}</strong><br>
           <small>${new Date(p.created_at).toLocaleString()}</small>
           <p>${p.text || ""}</p>
-          ${p.image ? `<img src="${p.image}">` : ""}
+          ${p.image ? `<img src="${p.image}" />` : ""}
         `;
         feed.appendChild(div);
       });

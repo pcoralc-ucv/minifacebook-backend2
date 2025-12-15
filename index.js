@@ -93,7 +93,7 @@ function auth(req, res, next) {
     req.userId = decoded.id;
     next();
   } catch {
-    return res.status(401).json({ success: false, message: "Token inv�lido" });
+    return res.status(401).json({ success: false, message: "Token inválido" });
   }
 }
 
@@ -161,10 +161,10 @@ app.get("/verify", async (req, res) => {
   );
 
   if (result.affectedRows === 0) {
-    return res.send("Token inv�lido o expirado");
+    return res.send("Token inválido o expirado");
   }
 
-  res.send("Cuenta verificada. Ya puedes iniciar sesi�n.");
+  res.send("Cuenta verificada. Ya puedes iniciar sesión.");
 });
 
 /* -------- LOGIN -------- */
@@ -186,7 +186,7 @@ app.post("/login", async (req, res) => {
 
   const ok = await bcrypt.compare(password, rows[0].password);
   if (!ok) {
-    return res.json({ success: false, message: "Contrase�a incorrecta" });
+    return res.json({ success: false, message: "Contraseña incorrecta" });
   }
 
   const token = jwt.sign(
@@ -207,7 +207,7 @@ app.post("/create-post", auth, upload.single("image"), async (req, res) => {
   const image = req.file ? req.file.path : null; // URL de Cloudinary
 
   if (!text && !image) {
-    return res.json({ success: false, message: "Post vac�o" });
+    return res.json({ success: false, message: "Post vacío" });
   }
 
   await db.query(
@@ -235,5 +235,5 @@ app.get("/get-posts", auth, async (req, res) => {
 ====================== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("?? MiniFacebook corriendo en puerto", PORT);
+  console.log("🔥 MiniFacebook corriendo en puerto", PORT);
 });
