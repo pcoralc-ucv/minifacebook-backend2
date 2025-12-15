@@ -3,73 +3,118 @@
 <head>
   <meta charset="UTF-8">
   <title>MiniFacebook | Feed</title>
+
   <link rel="stylesheet" href="/css/style.css">
+
   <style>
     body {
-      background: #f0f2f5;
+      margin: 0;
       font-family: Arial, sans-serif;
+      background: url("/img/vallejo.jpg") no-repeat center center fixed;
+      background-size: cover;
     }
+
+    .overlay {
+      min-height: 100vh;
+      background: rgba(240, 242, 245, 0.85);
+      padding: 30px 0;
+    }
+
     .container {
       width: 500px;
-      margin: 30px auto;
+      margin: auto;
     }
+
     .post-box {
       background: #fff;
       padding: 15px;
-      border-radius: 8px;
+      border-radius: 10px;
       margin-bottom: 20px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
+
+    .post-box h3 {
+      margin: 0 0 10px;
+    }
+
     textarea {
       width: 100%;
       border-radius: 6px;
       padding: 10px;
       resize: none;
+      border: 1px solid #ccc;
+      margin-bottom: 10px;
     }
+
+    input[type="file"] {
+      margin-bottom: 10px;
+    }
+
+    button {
+      background: #1877f2;
+      color: #fff;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #166fe5;
+    }
+
+    .logout {
+      background: #e53935;
+      float: right;
+    }
+
     .post {
       background: #fff;
       padding: 15px;
-      border-radius: 8px;
+      border-radius: 10px;
       margin-bottom: 15px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
+
     .post img {
       width: 100%;
-      border-radius: 6px;
+      border-radius: 8px;
       margin-top: 10px;
     }
+
     .post small {
       color: #777;
     }
-    .logout {
-      background: #e53935;
-      color: #fff;
-      border: none;
-      padding: 8px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      float: right;
-    }
   </style>
 </head>
+
 <body>
 
-<div class="container">
+<div class="overlay">
+  <div class="container">
 
-  <div class="post-box">
-    <button class="logout" onclick="logout()">Salir</button>
-    <h3>MiniFacebook</h3>
+    <!-- CREAR POST -->
+    <div class="post-box">
+      <button class="logout" onclick="logout()">Salir</button>
+      <h3>MiniFacebook</h3>
 
-    <textarea id="text" rows="3" placeholder="¿Qué estás pensando?"></textarea>
-    <input type="file" id="image">
-    <br><br>
-    <button onclick="createPost()">Publicar</button>
+      <textarea id="text" rows="3" placeholder="¿Qué estás pensando?"></textarea>
+
+      <!-- ?? CLAVE: name="image" -->
+      <input type="file" id="image" name="image" accept="image/*">
+
+      <button type="button" onclick="createPost()">Publicar</button>
+    </div>
+
+    <!-- FEED -->
+    <div id="feed"></div>
+
   </div>
-
-  <div id="feed"></div>
-
 </div>
 
 <script>
   const token = localStorage.getItem("token");
+
   if (!token) {
     window.location.href = "/login.html";
   }
@@ -104,6 +149,7 @@
       document.getElementById("text").value = "";
       document.getElementById("image").value = "";
       loadPosts();
+      window.scrollTo({ top: 0, behavior: "smooth" });
     });
   }
 
@@ -121,7 +167,8 @@
       posts.forEach(p => {
         const div = document.createElement("div");
         div.className = "post";
-        div.innerHTML = `<strong>${p.name}</strong><br>
+        div.innerHTML = `
+          <strong>${p.name}</strong><br>
           <small>${new Date(p.created_at).toLocaleString()}</small>
           <p>${p.text || ""}</p>
           ${p.image ? `<img src="${p.image}">` : ""}
