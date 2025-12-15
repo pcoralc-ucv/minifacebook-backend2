@@ -12,37 +12,59 @@
     <p style="margin-bottom:15px;color:#666;">Crea tu cuenta</p>
 
     <input type="text" id="name" placeholder="Nombre completo">
-    <input type="email" id="email" placeholder="Correo">
-    <input type="password" id="password" placeholder="ContraseÃ±a">
+    <input type="email" id="email" placeholder="Correo electrónico">
+    <input type="password" id="password" placeholder="Contraseña">
 
     <button onclick="register()">Registrarse</button>
 
-    <p id="msg"></p>
+    <p id="msg" style="margin-top:10px;"></p>
 
     <p style="margin-top:15px;font-size:14px;">
-      Â¿Ya tienes cuenta?
+      ¿Ya tienes cuenta?
       <a href="/login.html" style="color:#1877f2;text-decoration:none;">
-        Inicia sesiÃ³n
+        Inicia sesión
       </a>
     </p>
   </div>
 
   <script>
-    function register() {
-      fetch("/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: document.getElementById("name").value,
-          email: document.getElementById("email").value,
-          password: document.getElementById("password").value
-        })
-      })
-      .then(res => res.json())
-      .then(data => {
-        document.getElementById("msg").innerText =
-          data.message || data.error;
-      });
+    async function register() {
+      const msg = document.getElementById("msg");
+      msg.innerText = "";
+      msg.style.color = "#000";
+
+      const name = document.getElementById("name").value.trim();
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value.trim();
+
+      if (!name || !email || !password) {
+        msg.style.color = "red";
+        msg.innerText = "Completa todos los campos";
+        return;
+      }
+
+      try {
+        const res = await fetch("/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, email, password })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          msg.style.color = "red";
+          msg.innerText = data.message || data.error || "Error al registrarse";
+          return;
+        }
+
+        msg.style.color = "green";
+        msg.innerText = data.message;
+
+      } catch (err) {
+        msg.style.color = "red";
+        msg.innerText = "Error de conexión con el servidor";
+      }
     }
   </script>
 
