@@ -26,8 +26,8 @@
 
   <script>
     function login() {
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value.trim();
       const msg = document.getElementById("msg");
 
       if (!email || !password) {
@@ -52,14 +52,14 @@
           msg.style.color = "green";
           msg.innerText = data.message || "Login exitoso ?";
 
-          // Redirigir (opcional)
+          // ?? Redirigir al FEED
           setTimeout(() => {
-            // window.location.href = "/dashboard.html";
-          }, 1000);
+            window.location.href = "/posts.html";
+          }, 800);
 
         } else {
           msg.style.color = "red";
-          msg.innerText = data.message || "Error al iniciar sesión";
+          msg.innerText = data.message || "Credenciales incorrectas";
         }
       })
       .catch(() => {
