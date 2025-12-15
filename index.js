@@ -21,19 +21,18 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 /* ======================
-   ENV
+   ENV VARIABLES (MATCH RENDER)
 ====================== */
-const {
-  BASE_URL,
-  SENDGRID_API_KEY,
-  MAIL_FROM,
-  JWT_SECRET,
-  MYSQLHOST,
-  MYSQLUSER,
-  MYSQLPASSWORD,
-  MYSQLDATABASE,
-  MYSQLPORT,
-} = process.env;
+const BASE_URL = process.env.BASE_URL;
+const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
+const MAIL_FROM = process.env.MAIL_FROM;
+const JWT_SECRET = process.env.JWT_SECRET;
+
+const MYSQLHOST = process.env.MYSQLHOST;
+const MYSQLUSER = process.env.MYSQLUSER;
+const MYSQLPASSWORD = process.env.MYSQLPASSWORD;
+const MYSQLDATABASE = process.env.MYSQLDATABASE;
+const MYSQLPORT = process.env.MYSQLPORT || 3306;
 
 /* ======================
    ENV VALIDATION
@@ -66,14 +65,14 @@ if (
 sgMail.setApiKey(SENDGRID_API_KEY);
 
 /* ======================
-   DB
+   DATABASE
 ====================== */
 const db = await mysql.createPool({
   host: MYSQLHOST,
   user: MYSQLUSER,
   password: MYSQLPASSWORD,
   database: MYSQLDATABASE,
-  port: MYSQLPORT || 3306,
+  port: MYSQLPORT,
   waitForConnections: true,
   connectionLimit: 10,
 });
@@ -81,6 +80,8 @@ const db = await mysql.createPool({
 /* ======================
    ROUTES
 ====================== */
+
+// Home ? Login
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "login.html"));
 });
@@ -91,7 +92,7 @@ app.post("/register", async (req, res) => {
     const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
-      return res.status(400).json({
+      return res.json({
         success: false,
         message: "Completa todos los campos",
       });
@@ -102,7 +103,7 @@ app.post("/register", async (req, res) => {
       [email]
     );
 
-    // Existe pero no verificado ? reenviar correo
+    // Usuario existe pero no verificado ? reenviar correo
     if (existing.length > 0 && !existing[0].verified) {
       const link = `${BASE_URL}/verify?token=${existing[0].verify_token}`;
 
@@ -124,21 +125,21 @@ app.post("/register", async (req, res) => {
       });
     }
 
-    // Ya existe y está verificado
+    // Usuario ya verificado
     if (existing.length > 0) {
-      return res.status(400).json({
+      return res.json({
         success: false,
         message: "El correo ya está registrado",
       });
     }
 
-    // Registrar nuevo usuario
-    const hashedPass = await bcrypt.hash(password, 10);
+    // Crear usuario nuevo
+    const hashedPassword = await bcrypt.hash(password, 10);
     const verifyToken = uuidv4();
 
     await db.query(
       "INSERT INTO users (name, email, password, verify_token, verified) VALUES (?, ?, ?, ?, 0)",
-      [name, email, hashedPass, verifyToken]
+      [name, email, hashedPassword, verifyToken]
     );
 
     const link = `${BASE_URL}/verify?token=${verifyToken}`;
@@ -160,7 +161,7 @@ app.post("/register", async (req, res) => {
     });
   } catch (err) {
     console.error("? Error register:", err.response?.body || err);
-    return res.status(500).json({
+    return res.json({
       success: false,
       message: "Error interno del servidor",
     });
@@ -199,22 +200,22 @@ app.post("/login", async (req, res) => {
     );
 
     if (rows.length === 0) {
-      return res.status(400).json({
+      return res.json({
         success: false,
         message: "Usuario no existe",
       });
     }
 
     if (!rows[0].verified) {
-      return res.status(401).json({
+      return res.json({
         success: false,
         message: "Verifica tu correo primero",
       });
     }
 
-    const ok = await bcrypt.compare(password, rows[0].password);
-    if (!ok) {
-      return res.status(400).json({
+    const match = await bcrypt.compare(password, rows[0].password);
+    if (!match) {
+      return res.json({
         success: false,
         message: "Contraseña incorrecta",
       });
@@ -233,7 +234,7 @@ app.post("/login", async (req, res) => {
     });
   } catch (err) {
     console.error("? Error login:", err);
-    return res.status(500).json({
+    return res.json({
       success: false,
       message: "Error interno del servidor",
     });
