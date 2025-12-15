@@ -11,7 +11,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 /* ======================
-   __dirname (ESM)
+   __dirname FIX (ESM)
 ====================== */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,7 +47,7 @@ const {
 sgMail.setApiKey(SENDGRID_API_KEY);
 
 /* ======================
-   CLOUDINARY
+   CLOUDINARY CONFIG
 ====================== */
 cloudinary.config({
   cloud_name: CLOUDINARY_CLOUD_NAME,
@@ -56,15 +56,16 @@ cloudinary.config({
 });
 
 /* ======================
-   MULTER + CLOUDINARY
+   MULTER CLOUDINARY (CORRECTO)
 ====================== */
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
     folder: "minifacebook",
-    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+    resource_type: "image",
   },
 });
+
 const upload = multer({ storage });
 
 /* ======================
@@ -79,13 +80,11 @@ const db = await mysql.createPool({
 });
 
 /* ======================
-   AUTH MIDDLEWARE
+   AUTH
 ====================== */
 function auth(req, res, next) {
   const header = req.headers.authorization;
-  if (!header) {
-    return res.status(401).json({ success: false, message: "Token requerido" });
-  }
+  if (!header) return res.status(401).json({ success: false });
 
   try {
     const token = header.split(" ")[1];
@@ -93,7 +92,7 @@ function auth(req, res, next) {
     req.userId = decoded.id;
     next();
   } catch {
-    return res.status(401).json({ success: false, message: "Token inválido" });
+    res.status(401).json({ success: false });
   }
 }
 
@@ -107,111 +106,61 @@ app.get("/", (req, res) => {
 /* -------- REGISTER -------- */
 app.post("/register", async (req, res) => {
   const { name, email, password } = req.body;
-
-  if (!name || !email || !password) {
-    return res.json({ success: false, message: "Completa todos los campos" });
-  }
-
-  const [existing] = await db.query(
-    "SELECT verified, verify_token FROM users WHERE email=?",
-    [email]
-  );
-
-  if (existing.length > 0 && !existing[0].verified) {
-    const link = `${BASE_URL}/verify?token=${existing[0].verify_token}`;
-    await sgMail.send({
-      to: email,
-      from: MAIL_FROM,
-      subject: "Verifica tu cuenta",
-      html: `<a href="${link}">Verificar cuenta</a>`,
-    });
-    return res.json({ success: true, message: "Correo ya registrado" });
-  }
-
-  if (existing.length > 0) {
-    return res.json({ success: false, message: "Correo ya registrado" });
-  }
-
   const hash = await bcrypt.hash(password, 10);
-  const verifyToken = uuidv4();
+  const token = uuidv4();
 
   await db.query(
-    "INSERT INTO users (name, email, password, verify_token, verified) VALUES (?, ?, ?, ?, 0)",
-    [name, email, hash, verifyToken]
+    "INSERT INTO users (name,email,password,verify_token,verified) VALUES (?,?,?,?,0)",
+    [name, email, hash, token]
   );
 
-  const link = `${BASE_URL}/verify?token=${verifyToken}`;
+  const link = `${BASE_URL}/verify?token=${token}`;
   await sgMail.send({
     to: email,
     from: MAIL_FROM,
-    subject: "Bienvenido a MiniFacebook",
+    subject: "Verifica tu cuenta",
     html: `<a href="${link}">Verificar cuenta</a>`,
   });
 
-  res.json({ success: true, message: "Registro exitoso" });
+  res.json({ success: true });
 });
 
 /* -------- VERIFY -------- */
 app.get("/verify", async (req, res) => {
   const { token } = req.query;
-
-  const [result] = await db.query(
+  await db.query(
     "UPDATE users SET verified=1, verify_token=NULL WHERE verify_token=?",
     [token]
   );
-
-  if (result.affectedRows === 0) {
-    return res.send("Token inválido o expirado");
-  }
-
-  res.send("Cuenta verificada. Ya puedes iniciar sesión.");
+  res.send("Cuenta verificada");
 });
 
 /* -------- LOGIN -------- */
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
+  const [u] = await db.query("SELECT * FROM users WHERE email=?", [email]);
+  if (!u.length) return res.json({ success: false });
 
-  const [rows] = await db.query(
-    "SELECT * FROM users WHERE email=?",
-    [email]
-  );
+  const ok = await bcrypt.compare(password, u[0].password);
+  if (!ok) return res.json({ success: false });
 
-  if (rows.length === 0) {
-    return res.json({ success: false, message: "Usuario no existe" });
-  }
-
-  if (!rows[0].verified) {
-    return res.json({ success: false, message: "Verifica tu correo" });
-  }
-
-  const ok = await bcrypt.compare(password, rows[0].password);
-  if (!ok) {
-    return res.json({ success: false, message: "Contraseña incorrecta" });
-  }
-
-  const token = jwt.sign(
-    { id: rows[0].id },
-    JWT_SECRET,
-    { expiresIn: "1h" }
-  );
-
+  const token = jwt.sign({ id: u[0].id }, JWT_SECRET, { expiresIn: "1h" });
   res.json({ success: true, token });
 });
 
 /* -------- CREATE POST -------- */
 app.post("/create-post", auth, upload.single("image"), async (req, res) => {
-  console.log("BODY:", req.body);
   console.log("FILE:", req.file);
 
   const text = req.body.text || null;
-  const image = req.file ? req.file.path : null; // URL de Cloudinary
+  const image = req.file?.path || null; // ?? CLOUDINARY URL
 
   if (!text && !image) {
-    return res.json({ success: false, message: "Post vacío" });
+    return res.json({ success: false });
   }
 
   await db.query(
-    "INSERT INTO posts (user_id, text, image) VALUES (?, ?, ?)",
+    "INSERT INTO posts (user_id,text,image) VALUES (?,?,?)",
     [req.userId, text, image]
   );
 
@@ -226,14 +175,12 @@ app.get("/get-posts", auth, async (req, res) => {
     JOIN users u ON u.id = p.user_id
     ORDER BY p.created_at DESC
   `);
-
   res.json(posts);
 });
 
 /* ======================
    SERVER
 ====================== */
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("🔥 MiniFacebook corriendo en puerto", PORT);
-});
+app.listen(process.env.PORT || 3000, () =>
+  console.log("?? MiniFacebook listo")
+);
