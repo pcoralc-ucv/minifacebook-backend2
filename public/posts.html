@@ -2,108 +2,137 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>MiniFacebook | Posts</title>
+  <title>MiniFacebook | Feed</title>
   <link rel="stylesheet" href="/css/style.css">
+  <style>
+    body {
+      background: #f0f2f5;
+      font-family: Arial, sans-serif;
+    }
+    .container {
+      width: 500px;
+      margin: 30px auto;
+    }
+    .post-box {
+      background: #fff;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    textarea {
+      width: 100%;
+      border-radius: 6px;
+      padding: 10px;
+      resize: none;
+    }
+    .post {
+      background: #fff;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+    .post img {
+      width: 100%;
+      border-radius: 6px;
+      margin-top: 10px;
+    }
+    .post small {
+      color: #777;
+    }
+    .logout {
+      background: #e53935;
+      color: #fff;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      float: right;
+    }
+  </style>
 </head>
 <body>
 
-  <div class="card">
-    <h2>MiniFacebook</h2>
-    <p style="color:#666;">Bienvenido al feed 🔥</p>
+<div class="container">
 
-    <button onclick="logout()" style="background:#e53935;">
-      Cerrar sesión
-    </button>
+  <div class="post-box">
+    <button class="logout" onclick="logout()">Salir</button>
+    <h3>MiniFacebook</h3>
 
-    <hr style="margin:20px 0;">
-
-    <h3>Publica algo</h3>
-    <textarea id="postText" placeholder="Escribe tu post..." rows="4"></textarea>
+    <textarea id="text" rows="3" placeholder="�Qu� est�s pensando?"></textarea>
+    <input type="file" id="image">
     <br><br>
-    <input type="file" id="imageInput" />
-    <button onclick="submitPost()">Subir Post</button>
-
-    <hr>
-
-    <h3>Posts recientes</h3>
-    <div id="postsContainer">
-      <!-- Aquí se mostrarán los posts -->
-    </div>
+    <button onclick="createPost()">Publicar</button>
   </div>
 
-  <script>
-    // 🔐 Protección básica
-    const token = localStorage.getItem("token");
+  <div id="feed"></div>
 
-    if (!token) {
-      window.location.href = "/login.html";
+</div>
+
+<script>
+  const token = localStorage.getItem("token");
+  if (!token) {
+    window.location.href = "/login.html";
+  }
+
+  function logout() {
+    localStorage.removeItem("token");
+    window.location.href = "/login.html";
+  }
+
+  function createPost() {
+    const text = document.getElementById("text").value;
+    const image = document.getElementById("image").files[0];
+
+    if (!text && !image) {
+      alert("Escribe algo o sube una imagen");
+      return;
     }
 
-    function logout() {
-      localStorage.removeItem("token");
-      window.location.href = "/login.html";
-    }
+    const formData = new FormData();
+    formData.append("text", text);
+    if (image) formData.append("image", image);
 
-    // Subir post
-    function submitPost() {
-      const postText = document.getElementById("postText").value;
-      const imageInput = document.getElementById("imageInput").files[0];
-      
-      if (!postText && !imageInput) {
-        alert("Escribe algo o sube una imagen.");
-        return;
+    fetch("/create-post", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token
+      },
+      body: formData
+    })
+    .then(res => res.json())
+    .then(() => {
+      document.getElementById("text").value = "";
+      document.getElementById("image").value = "";
+      loadPosts();
+    });
+  }
+
+  function loadPosts() {
+    fetch("/get-posts", {
+      headers: {
+        Authorization: "Bearer " + token
       }
+    })
+    .then(res => res.json())
+    .then(posts => {
+      const feed = document.getElementById("feed");
+      feed.innerHTML = "";
 
-      const formData = new FormData();
-      formData.append("text", postText);
-      if (imageInput) {
-        formData.append("image", imageInput);
-      }
-
-      fetch("/create-post", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`
-        },
-        body: formData
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          alert("Post creado con éxito!");
-          loadPosts(); // Cargar los posts después de agregar uno nuevo
-        } else {
-          alert("Error al crear el post.");
-        }
+      posts.forEach(p => {
+        const div = document.createElement("div");
+        div.className = "post";
+        div.innerHTML = `<strong>${p.name}</strong><br>
+          <small>${new Date(p.created_at).toLocaleString()}</small>
+          <p>${p.text || ""}</p>
+          ${p.image ? `<img src="${p.image}">` : ""}
+        `;
+        feed.appendChild(div);
       });
-    }
+    });
+  }
 
-    // Cargar los posts
-    function loadPosts() {
-      fetch("/get-posts", {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${token}`
-        }
-      })
-      .then(res => res.json())
-      .then(posts => {
-        const postsContainer = document.getElementById("postsContainer");
-        postsContainer.innerHTML = '';
-        posts.forEach(post => {
-          const postDiv = document.createElement("div");
-          postDiv.classList.add("post");
-          postDiv.innerHTML = `
-            <p>${post.text}</p>
-            ${post.image ? `<img src="${post.image}" alt="post image" style="width:100px;height:auto;" />` : ''}
-          `;
-          postsContainer.appendChild(postDiv);
-        });
-      });
-    }
-
-    loadPosts(); // Cargar los posts cuando se carga la página
-  </script>
+  loadPosts();
+</script>
 
 </body>
 </html>
