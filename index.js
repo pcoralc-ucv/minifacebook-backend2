@@ -91,7 +91,10 @@ app.post("/register", async (req, res) => {
     const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
-      return res.status(400).json({ error: "Campos incompletos" });
+      return res.status(400).json({
+        success: false,
+        message: "Completa todos los campos",
+      });
     }
 
     const [existing] = await db.query(
@@ -99,6 +102,7 @@ app.post("/register", async (req, res) => {
       [email]
     );
 
+    // Existe pero no verificado ? reenviar correo
     if (existing.length > 0 && !existing[0].verified) {
       const link = `${BASE_URL}/verify?token=${existing[0].verify_token}`;
 
@@ -114,14 +118,21 @@ app.post("/register", async (req, res) => {
       });
 
       return res.json({
-        msg: "Correo ya registrado. Se reenvi´o el correo de verificación.",
+        success: true,
+        message:
+          "El correo ya estaba registrado. Se reenvi´o el correo de verificación.",
       });
     }
 
+    // Ya existe y está verificado
     if (existing.length > 0) {
-      return res.status(400).json({ error: "El correo ya está registrado" });
+      return res.status(400).json({
+        success: false,
+        message: "El correo ya está registrado",
+      });
     }
 
+    // Registrar nuevo usuario
     const hashedPass = await bcrypt.hash(password, 10);
     const verifyToken = uuidv4();
 
@@ -143,58 +154,90 @@ app.post("/register", async (req, res) => {
       `,
     });
 
-    res.json({ msg: "Usuario registrado. Revisa tu correo." });
+    return res.json({
+      success: true,
+      message: "Registro exitoso. Revisa tu correo para validar tu cuenta.",
+    });
   } catch (err) {
     console.error("? Error register:", err.response?.body || err);
-    res.status(500).json({ error: "Error al registrar usuario" });
+    return res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
   }
 });
 
 /* -------- VERIFY -------- */
 app.get("/verify", async (req, res) => {
-  const { token } = req.query;
+  try {
+    const { token } = req.query;
 
-  const [result] = await db.query(
-    "UPDATE users SET verified=1, verify_token=NULL WHERE verify_token=?",
-    [token]
-  );
+    const [result] = await db.query(
+      "UPDATE users SET verified=1, verify_token=NULL WHERE verify_token=?",
+      [token]
+    );
 
-  if (result.affectedRows === 0) {
-    return res.send("? Token inválido o expirado");
+    if (result.affectedRows === 0) {
+      return res.send("? Token inválido o expirado");
+    }
+
+    res.send("? Cuenta verificada. Ya puedes iniciar sesión.");
+  } catch (err) {
+    console.error("? Error verify:", err);
+    res.send("? Error al verificar la cuenta");
   }
-
-  res.send("? Cuenta verificada. Ya puedes iniciar sesión.");
 });
 
 /* -------- LOGIN -------- */
 app.post("/login", async (req, res) => {
-  const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-  const [rows] = await db.query(
-    "SELECT * FROM users WHERE email=?",
-    [email]
-  );
+    const [rows] = await db.query(
+      "SELECT * FROM users WHERE email=?",
+      [email]
+    );
 
-  if (rows.length === 0) {
-    return res.status(400).json({ error: "Usuario no existe" });
+    if (rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Usuario no existe",
+      });
+    }
+
+    if (!rows[0].verified) {
+      return res.status(401).json({
+        success: false,
+        message: "Verifica tu correo primero",
+      });
+    }
+
+    const ok = await bcrypt.compare(password, rows[0].password);
+    if (!ok) {
+      return res.status(400).json({
+        success: false,
+        message: "Contraseña incorrecta",
+      });
+    }
+
+    const token = jwt.sign(
+      { id: rows[0].id },
+      JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    return res.json({
+      success: true,
+      message: "Login exitoso",
+      token,
+    });
+  } catch (err) {
+    console.error("? Error login:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Error interno del servidor",
+    });
   }
-
-  if (!rows[0].verified) {
-    return res.status(401).json({ error: "Verifica tu correo primero" });
-  }
-
-  const ok = await bcrypt.compare(password, rows[0].password);
-  if (!ok) {
-    return res.status(400).json({ error: "Contraseña incorrecta" });
-  }
-
-  const token = jwt.sign(
-    { id: rows[0].id },
-    JWT_SECRET,
-    { expiresIn: "1h" }
-  );
-
-  res.json({ token });
 });
 
 /* ======================
