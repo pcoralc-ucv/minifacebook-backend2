@@ -188,6 +188,9 @@ app.post("/login", async (req, res) => {
 
 /* -------- CREATE POST -------- */
 app.post("/create-post", auth, upload.single("image"), async (req, res) => {
+  console.log("BODY:", req.body);
+console.log("FILE:", req.file);
+
   try {
     const text = req.body.text || null;
 
