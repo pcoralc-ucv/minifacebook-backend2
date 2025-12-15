@@ -21,7 +21,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 /* ======================
-   ENV VALIDATION
+   ENV
 ====================== */
 const {
   BASE_URL,
@@ -35,16 +35,28 @@ const {
   MYSQLPORT,
 } = process.env;
 
+/* ======================
+   ENV VALIDATION
+====================== */
 if (
   !BASE_URL ||
   !SENDGRID_API_KEY ||
   !MAIL_FROM ||
+  !JWT_SECRET ||
   !MYSQLHOST ||
   !MYSQLUSER ||
   !MYSQLPASSWORD ||
   !MYSQLDATABASE
 ) {
   console.error("? Faltan variables de entorno críticas");
+  console.log({
+    BASE_URL,
+    SENDGRID_API_KEY: SENDGRID_API_KEY ? "OK" : "MISSING",
+    MAIL_FROM,
+    MYSQLHOST,
+    MYSQLUSER,
+    MYSQLDATABASE,
+  });
   process.exit(1);
 }
 
@@ -57,11 +69,13 @@ sgMail.setApiKey(SENDGRID_API_KEY);
    DB
 ====================== */
 const db = await mysql.createPool({
-  host: process.env.MYSQLHOST,
-  user: process.env.MYSQLUSER,
-  password: process.env.MYSQLPASSWORD,
-  database: process.env.MYSQLDATABASE,
-  port: process.env.MYSQLPORT,
+  host: MYSQLHOST,
+  user: MYSQLUSER,
+  password: MYSQLPASSWORD,
+  database: MYSQLDATABASE,
+  port: MYSQLPORT || 3306,
+  waitForConnections: true,
+  connectionLimit: 10,
 });
 
 /* ======================
@@ -80,13 +94,11 @@ app.post("/register", async (req, res) => {
       return res.status(400).json({ error: "Campos incompletos" });
     }
 
-    // ¿Existe usuario?
     const [existing] = await db.query(
       "SELECT verified, verify_token FROM users WHERE email=?",
       [email]
     );
 
-    // Existe pero no verificado ? reenviar correo
     if (existing.length > 0 && !existing[0].verified) {
       const link = `${BASE_URL}/verify?token=${existing[0].verify_token}`;
 
@@ -106,12 +118,10 @@ app.post("/register", async (req, res) => {
       });
     }
 
-    // Ya verificado
     if (existing.length > 0) {
       return res.status(400).json({ error: "El correo ya está registrado" });
     }
 
-    // Registrar nuevo
     const hashedPass = await bcrypt.hash(password, 10);
     const verifyToken = uuidv4();
 
