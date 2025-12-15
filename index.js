@@ -3,28 +3,37 @@ import mysql from "mysql2/promise";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import sgMail from "@sendgrid/mail";
+import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import { fileURLToPath } from "url";
-import multer from "multer";
+import fs from "fs";
 
-// Configuración de almacenamiento de imágenes (para multer)
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/"); // Guardar en carpeta "uploads"
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + "-" + file.originalname);
-  },
-});
-const upload = multer({ storage: storage });
+/* ======================
+   __dirname FIX (ESM)
+====================== */
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// Configuración de Express
+/* ======================
+   APP
+====================== */
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
-app.use("/uploads", express.static("uploads")); // Para servir imágenes desde /uploads
 
+/* ======================
+   UPLOADS FOLDER (Render-safe)
+====================== */
+const uploadsDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir);
+}
+app.use("/uploads", express.static(uploadsDir));
+
+/* ======================
+   ENV
+====================== */
 const {
   BASE_URL,
   SENDGRID_API_KEY,
@@ -37,6 +46,14 @@ const {
   MYSQLPORT,
 } = process.env;
 
+/* ======================
+   SENDGRID
+====================== */
+sgMail.setApiKey(SENDGRID_API_KEY);
+
+/* ======================
+   DB
+====================== */
 const db = await mysql.createPool({
   host: MYSQLHOST,
   user: MYSQLUSER,
@@ -45,41 +62,89 @@ const db = await mysql.createPool({
   port: MYSQLPORT || 3306,
 });
 
-// Ruta para subir un post (con texto o imagen)
-app.post("/create-post", upload.single("image"), async (req, res) => {
-  try {
-    const { text } = req.body;
-    const image = req.file ? `/uploads/${req.file.filename}` : null;
-    const userId = jwt.verify(req.headers.authorization.split(" ")[1], JWT_SECRET).id;
+/* ======================
+   MULTER CONFIG
+====================== */
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + "-" + file.originalname);
+  },
+});
 
-    const [result] = await db.query(
+const upload = multer({ storage });
+
+/* ======================
+   MIDDLEWARE JWT
+====================== */
+function auth(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header) {
+    return res.status(401).json({ message: "Token requerido" });
+  }
+
+  try {
+    const token = header.split(" ")[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.userId = decoded.id;
+    next();
+  } catch {
+    return res.status(401).json({ message: "Token inválido" });
+  }
+}
+
+/* ======================
+   ROUTES
+====================== */
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "login.html"));
+});
+
+/* -------- CREATE POST -------- */
+app.post("/create-post", auth, upload.single("image"), async (req, res) => {
+  try {
+    const text = req.body.text || null;
+    const image = req.file ? `/uploads/${req.file.filename}` : null;
+
+    if (!text && !image) {
+      return res.status(400).json({ message: "Post vacío" });
+    }
+
+    await db.query(
       "INSERT INTO posts (user_id, text, image) VALUES (?, ?, ?)",
-      [userId, text, image]
+      [req.userId, text, image]
     );
 
     res.json({ success: true, message: "Post creado exitosamente" });
   } catch (err) {
-    console.error("Error creating post:", err);
-    res.status(500).json({ success: false, message: "Error al crear el post" });
+    console.error("? Error create-post:", err);
+    res.status(500).json({ message: "Error al crear post" });
   }
 });
 
-// Ruta para obtener los posts
-app.get("/get-posts", async (req, res) => {
+/* -------- GET POSTS -------- */
+app.get("/get-posts", auth, async (req, res) => {
   try {
-    const userId = jwt.verify(req.headers.authorization.split(" ")[1], JWT_SECRET).id;
-
-    const [posts] = await db.query("SELECT text, image FROM posts WHERE user_id = ?", [userId]);
+    const [posts] = await db.query(
+      `SELECT p.text, p.image, p.created_at, u.name
+       FROM posts p
+       JOIN users u ON u.id = p.user_id
+       ORDER BY p.created_at DESC`
+    );
 
     res.json(posts);
   } catch (err) {
-    console.error("Error fetching posts:", err);
-    res.status(500).json({ message: "Error al obtener los posts" });
+    console.error("? Error get-posts:", err);
+    res.status(500).json({ message: "Error al obtener posts" });
   }
 });
 
-// Start server
+/* ======================
+   SERVER
+====================== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`API corriendo en puerto ${PORT}`);
+  console.log(`?? API corriendo en puerto ${PORT}`);
 });
