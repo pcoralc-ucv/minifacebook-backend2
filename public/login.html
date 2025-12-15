@@ -2,48 +2,69 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Login</title>
+  <title>MiniFacebook | Login</title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
 
   <div class="card">
     <h2>MiniFacebook</h2>
-    <p style="color:#666;">Inicia sesiÃ³n</p>
+    <p style="color:#666;">Inicia sesión</p>
 
-    <input type="email" id="email" placeholder="Correo">
-    <input type="password" id="password" placeholder="ContraseÃ±a">
+    <input type="email" id="email" placeholder="Correo" required>
+    <input type="password" id="password" placeholder="Contraseña" required>
 
     <button onclick="login()">Entrar</button>
 
-    <p id="msg" style="color:red;"></p>
+    <p id="msg" style="margin-top:10px;"></p>
 
-    <p>
-      Â¿No tienes cuenta?
-      <a href="/register.html">RegÃ­strate</a>
+    <p style="margin-top:15px;">
+      ¿No tienes cuenta?
+      <a href="/register.html">Regístrate</a>
     </p>
   </div>
 
   <script>
     function login() {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      const msg = document.getElementById("msg");
+
+      if (!email || !password) {
+        msg.style.color = "red";
+        msg.innerText = "Completa todos los campos";
+        return;
+      }
+
       fetch("/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: email.value,
-          password: password.value
-        })
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ email, password })
       })
       .then(res => res.json())
       .then(data => {
-        if (data.token) {
-          msg.style.color = "green";
-          msg.innerText = "Login exitoso ðŸ”¥";
+        if (data.success) {
+          // Guardar token
           localStorage.setItem("token", data.token);
+
+          msg.style.color = "green";
+          msg.innerText = data.message || "Login exitoso ?";
+
+          // Redirigir (opcional)
+          setTimeout(() => {
+            // window.location.href = "/dashboard.html";
+          }, 1000);
+
         } else {
           msg.style.color = "red";
-          msg.innerText = data.error;
+          msg.innerText = data.message || "Error al iniciar sesión";
         }
+      })
+      .catch(() => {
+        msg.style.color = "red";
+        msg.innerText = "Error de conexión con el servidor";
       });
     }
   </script>
