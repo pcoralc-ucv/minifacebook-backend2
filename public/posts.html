@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>MiniFacebook | Posts</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <div class="card">
+    <h2>MiniFacebook</h2>
+    <p style="color:#666;">Bienvenido al feed 🔥</p>
+
+    <button onclick="logout()" style="background:#e53935;">
+      Cerrar sesión
+    </button>
+
+    <hr style="margin:20px 0;">
+
+    <h3>Publica algo</h3>
+    <textarea id="postText" placeholder="Escribe tu post..." rows="4"></textarea>
+    <br><br>
+    <input type="file" id="imageInput" />
+    <button onclick="submitPost()">Subir Post</button>
+
+    <hr>
+
+    <h3>Posts recientes</h3>
+    <div id="postsContainer">
+      <!-- Aquí se mostrarán los posts -->
+    </div>
+  </div>
+
+  <script>
+    // 🔐 Protección básica
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      window.location.href = "/login.html";
+    }
+
+    function logout() {
+      localStorage.removeItem("token");
+      window.location.href = "/login.html";
+    }
+
+    // Subir post
+    function submitPost() {
+      const postText = document.getElementById("postText").value;
+      const imageInput = document.getElementById("imageInput").files[0];
+      
+      if (!postText && !imageInput) {
+        alert("Escribe algo o sube una imagen.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("text", postText);
+      if (imageInput) {
+        formData.append("image", imageInput);
+      }
+
+      fetch("/create-post", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        },
+        body: formData
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          alert("Post creado con éxito!");
+          loadPosts(); // Cargar los posts después de agregar uno nuevo
+        } else {
+          alert("Error al crear el post.");
+        }
+      });
+    }
+
+    // Cargar los posts
+    function loadPosts() {
+      fetch("/get-posts", {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      })
+      .then(res => res.json())
+      .then(posts => {
+        const postsContainer = document.getElementById("postsContainer");
+        postsContainer.innerHTML = '';
+        posts.forEach(post => {
+          const postDiv = document.createElement("div");
+          postDiv.classList.add("post");
+          postDiv.innerHTML = `
+            <p>${post.text}</p>
+            ${post.image ? `<img src="${post.image}" alt="post image" style="width:100px;height:auto;" />` : ''}
+          `;
+          postsContainer.appendChild(postDiv);
+        });
+      });
+    }
+
+    loadPosts(); // Cargar los posts cuando se carga la página
+  </script>
+
+</body>
+</html>
