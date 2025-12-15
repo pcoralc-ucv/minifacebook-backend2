@@ -4,82 +4,52 @@
   <meta charset="UTF-8">
   <title>MiniFacebook | Feed</title>
   <link rel="stylesheet" href="/css/style.css">
-
   <style>
     body {
-      min-height: 100vh;
-      background:
-        linear-gradient(rgba(0,0,0,.35), rgba(0,0,0,.35)),
-        url("/img/vallejo.jpg") no-repeat center center fixed;
-      background-size: cover;
+      background: #f0f2f5;
       font-family: Arial, sans-serif;
     }
-
     .container {
       width: 500px;
       margin: 30px auto;
     }
-
     .post-box {
       background: #fff;
       padding: 15px;
-      border-radius: 10px;
+      border-radius: 8px;
       margin-bottom: 20px;
-      box-shadow: 0 6px 15px rgba(0,0,0,.15);
-
-      position: sticky;
-      top: 20px;
-      z-index: 10;
     }
-
     textarea {
       width: 100%;
       border-radius: 6px;
       padding: 10px;
       resize: none;
-      border: 1px solid #ccc;
-      margin-top: 10px;
     }
-
-    button {
-      background: #1877f2;
-      color: #fff;
-      border: none;
-      padding: 8px 14px;
-      border-radius: 6px;
-      cursor: pointer;
-      margin-top: 10px;
-    }
-
-    button:hover {
-      opacity: 0.9;
-    }
-
-    .logout {
-      background: #e53935;
-      float: right;
-    }
-
     .post {
       background: #fff;
       padding: 15px;
-      border-radius: 10px;
+      border-radius: 8px;
       margin-bottom: 15px;
-      box-shadow: 0 4px 10px rgba(0,0,0,.12);
     }
-
     .post img {
       width: 100%;
-      border-radius: 8px;
+      border-radius: 6px;
       margin-top: 10px;
     }
-
     .post small {
       color: #777;
     }
+    .logout {
+      background: #e53935;
+      color: #fff;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      float: right;
+    }
   </style>
 </head>
-
 <body>
 
 <div class="container">
@@ -90,7 +60,7 @@
 
     <textarea id="text" rows="3" placeholder="¿Qué estás pensando?"></textarea>
     <input type="file" id="image">
-    <br>
+    <br><br>
     <button onclick="createPost()">Publicar</button>
   </div>
 
@@ -133,15 +103,11 @@
     .then(() => {
       document.getElementById("text").value = "";
       document.getElementById("image").value = "";
-
-      loadPosts(true); // ?? recargar SIN mover scroll
+      loadPosts();
     });
   }
 
-  function loadPosts(keepScroll = false) {
-    const feed = document.getElementById("feed");
-    const scrollY = window.scrollY;
-
+  function loadPosts() {
     fetch("/get-posts", {
       headers: {
         Authorization: "Bearer " + token
@@ -149,23 +115,20 @@
     })
     .then(res => res.json())
     .then(posts => {
+      const feed = document.getElementById("feed");
       feed.innerHTML = "";
 
       posts.forEach(p => {
         const div = document.createElement("div");
         div.className = "post";
         div.innerHTML = `
-          <strong>${p.name || "Usuario"}</strong><br>
+          <strong>${p.name}</strong><br>
           <small>${new Date(p.created_at).toLocaleString()}</small>
           <p>${p.text || ""}</p>
           ${p.image ? `<img src="${p.image}">` : ""}
         `;
         feed.appendChild(div);
       });
-
-      if (keepScroll) {
-        window.scrollTo(0, scrollY);
-      }
     });
   }
 
