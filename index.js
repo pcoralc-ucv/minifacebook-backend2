@@ -256,6 +256,16 @@ app.get("/get-posts", auth, async (req, res) => {
   res.json(posts);
 });
 
+app.get("/debug/uploads", (req, res) => {
+  fs.readdir(uploadsDir, (err, files) => {
+    if (err) {
+      return res.json({ error: err.message });
+    }
+    res.json({ files });
+  });
+});
+
+
 /* ======================
    SERVER
 ====================== */
