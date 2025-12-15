@@ -4,10 +4,11 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import sgMail from "@sendgrid/mail";
 import multer from "multer";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
+import { v2 as cloudinary } from "cloudinary";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import { fileURLToPath } from "url";
-import fs from "fs";
 
 /* ======================
    __dirname FIX (ESM)
@@ -23,15 +24,6 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 /* ======================
-   UPLOADS (Render-safe)
-====================== */
-const uploadsDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
-}
-app.use("/uploads", express.static(uploadsDir));
-
-/* ======================
    ENV
 ====================== */
 const {
@@ -44,12 +36,36 @@ const {
   MYSQLPASSWORD,
   MYSQLDATABASE,
   MYSQLPORT,
+  CLOUDINARY_CLOUD_NAME,
+  CLOUDINARY_API_KEY,
+  CLOUDINARY_API_SECRET,
 } = process.env;
 
 /* ======================
    SENDGRID
 ====================== */
 sgMail.setApiKey(SENDGRID_API_KEY);
+
+/* ======================
+   CLOUDINARY
+====================== */
+cloudinary.config({
+  cloud_name: CLOUDINARY_CLOUD_NAME,
+  api_key: CLOUDINARY_API_KEY,
+  api_secret: CLOUDINARY_API_SECRET,
+});
+
+/* ======================
+   MULTER (Cloudinary)
+====================== */
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "minifacebook",
+    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+  },
+});
+const upload = multer({ storage });
 
 /* ======================
    DB
@@ -61,16 +77,6 @@ const db = await mysql.createPool({
   database: MYSQLDATABASE,
   port: MYSQLPORT || 3306,
 });
-
-/* ======================
-   MULTER
-====================== */
-const storage = multer.diskStorage({
-  destination: (_, __, cb) => cb(null, uploadsDir),
-  filename: (_, file, cb) =>
-    cb(null, Date.now() + "-" + file.originalname),
-});
-const upload = multer({ storage });
 
 /* ======================
    JWT MIDDLEWARE
@@ -114,18 +120,13 @@ app.post("/register", async (req, res) => {
 
     if (existing.length > 0 && !existing[0].verified) {
       const link = `${BASE_URL}/verify?token=${existing[0].verify_token}`;
-
       await sgMail.send({
         to: email,
         from: MAIL_FROM,
         subject: "Verifica tu cuenta",
         html: `<a href="${link}">Verificar cuenta</a>`,
       });
-
-      return res.json({
-        success: true,
-        message: "Correo ya registrado. Se reenvi´o verificación.",
-      });
+      return res.json({ success: true, message: "Correo ya registrado" });
     }
 
     if (existing.length > 0) {
@@ -141,7 +142,6 @@ app.post("/register", async (req, res) => {
     );
 
     const link = `${BASE_URL}/verify?token=${verifyToken}`;
-
     await sgMail.send({
       to: email,
       from: MAIL_FROM,
@@ -149,127 +149,64 @@ app.post("/register", async (req, res) => {
       html: `<a href="${link}">Verificar cuenta</a>`,
     });
 
-    res.json({
-      success: true,
-      message: "Registro exitoso. Revisa tu correo.",
-    });
+    res.json({ success: true, message: "Registro exitoso" });
   } catch (err) {
-    console.error("? Register:", err);
-    res.status(500).json({ success: false, message: "Error al registrar" });
+    console.error("Register error:", err);
+    res.status(500).json({ success: false });
   }
-});
-
-/* -------- VERIFY -------- */
-app.get("/verify", async (req, res) => {
-  const { token } = req.query;
-
-  const [result] = await db.query(
-    "UPDATE users SET verified=1, verify_token=NULL WHERE verify_token=?",
-    [token]
-  );
-
-  if (result.affectedRows === 0) {
-    return res.send("? Token inválido o expirado");
-  }
-
-  res.send("? Cuenta verificada. Ya puedes iniciar sesión.");
 });
 
 /* -------- LOGIN -------- */
 app.post("/login", async (req, res) => {
-  try {
-    const email = req.body.email?.trim();
-    const password = req.body.password?.trim();
+  const { email, password } = req.body;
 
-    const [rows] = await db.query(
-      "SELECT * FROM users WHERE email=?",
-      [email]
-    );
+  const [rows] = await db.query("SELECT * FROM users WHERE email=?", [email]);
+  if (rows.length === 0)
+    return res.json({ success: false, message: "Usuario no existe" });
 
-    if (rows.length === 0) {
-      return res.json({ success: false, message: "Usuario no existe" });
-    }
+  if (!rows[0].verified)
+    return res.json({ success: false, message: "Verifica tu correo" });
 
-    if (!rows[0].verified) {
-      return res.json({
-        success: false,
-        message: "Verifica tu correo primero",
-      });
-    }
+  const ok = await bcrypt.compare(password, rows[0].password);
+  if (!ok)
+    return res.json({ success: false, message: "Contraseña incorrecta" });
 
-    const ok = await bcrypt.compare(password, rows[0].password);
-    if (!ok) {
-      return res.json({
-        success: false,
-        message: "Contraseña incorrecta",
-      });
-    }
+  const token = jwt.sign({ id: rows[0].id }, JWT_SECRET, { expiresIn: "1h" });
 
-    const token = jwt.sign(
-      { id: rows[0].id },
-      JWT_SECRET,
-      { expiresIn: "1h" }
-    );
-
-    res.json({
-      success: true,
-      message: "Login exitoso",
-      token,
-    });
-  } catch (err) {
-    console.error("? Login:", err);
-    res.status(500).json({ success: false, message: "Error login" });
-  }
+  res.json({ success: true, token });
 });
 
 /* -------- CREATE POST -------- */
 app.post("/create-post", auth, upload.single("image"), async (req, res) => {
-  try {
-    const text = req.body.text || null;
-    const image = req.file ? `/uploads/${req.file.filename}` : null;
+  const text = req.body.text || null;
+  const image = req.file ? req.file.path : null; // ?? CLOUDINARY URL
 
-    if (!text && !image) {
-      return res.json({ success: false, message: "Post vacío" });
-    }
+  if (!text && !image)
+    return res.json({ success: false, message: "Post vacío" });
 
-    await db.query(
-      "INSERT INTO posts (user_id, text, image) VALUES (?, ?, ?)",
-      [req.userId, text, image]
-    );
+  await db.query(
+    "INSERT INTO posts (user_id, text, image) VALUES (?, ?, ?)",
+    [req.userId, text, image]
+  );
 
-    res.json({ success: true, message: "Post creado" });
-  } catch (err) {
-    console.error("? Create post:", err);
-    res.status(500).json({ success: false, message: "Error post" });
-  }
+  res.json({ success: true });
 });
 
 /* -------- GET POSTS -------- */
 app.get("/get-posts", auth, async (req, res) => {
-  const [posts] = await db.query(
-    `SELECT p.text, p.image, p.created_at, u.name
-     FROM posts p
-     JOIN users u ON u.id = p.user_id
-     ORDER BY p.created_at DESC`
-  );
-
+  const [posts] = await db.query(`
+    SELECT p.text, p.image, p.created_at, u.name
+    FROM posts p
+    JOIN users u ON u.id = p.user_id
+    ORDER BY p.created_at DESC
+  `);
   res.json(posts);
 });
-
-app.get("/debug/uploads", (req, res) => {
-  fs.readdir(uploadsDir, (err, files) => {
-    if (err) {
-      return res.json({ error: err.message });
-    }
-    res.json({ files });
-  });
-});
-
 
 /* ======================
    SERVER
 ====================== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`?? API corriendo en puerto ${PORT}`);
+  console.log("?? MiniFacebook corriendo en puerto", PORT);
 });
