@@ -68,10 +68,12 @@ cloudinary.config({
 ====================== */
 const storage = new CloudinaryStorage({
   cloudinary,
-  params: {
-    folder: "minifacebook",
-    allowed_formats: ["jpg", "jpeg", "png", "webp"],
-    transformation: [{ quality: "auto" }],
+  params: async (req, file) => {
+    return {
+      folder: "minifacebook",
+      format: file.mimetype.split("/")[1], // jpg, png
+      public_id: Date.now() + "-" + file.originalname
+    };
   },
 });
 
@@ -188,10 +190,15 @@ app.post("/login", async (req, res) => {
 app.post("/create-post", auth, upload.single("image"), async (req, res) => {
   try {
     const text = req.body.text || null;
-    const image = req.file?.path || null; // ?? URL CLOUDINARY REAL
 
-    if (!text && !image)
+    // ?? AQUÍ ESTABA EL ERROR
+    const image = req.file ? req.file.secure_url : null;
+
+    console.log("FILE:", req.file); // 
+
+    if (!text && !image) {
       return res.json({ success: false, message: "Post vacío" });
+    }
 
     await db.query(
       "INSERT INTO posts (user_id, text, image) VALUES (?, ?, ?)",
@@ -200,7 +207,7 @@ app.post("/create-post", auth, upload.single("image"), async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    console.error("? Create post:", err);
+    console.error("CREATE POST ERROR:", err);
     res.status(500).json({ success: false });
   }
 });
