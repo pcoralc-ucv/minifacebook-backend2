@@ -42,6 +42,14 @@ const {
 } = process.env;
 
 /* ======================
+   VALIDACIÓN ENV (CLAVE)
+====================== */
+if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
+  console.error("? Cloudinary ENV no configurado");
+  process.exit(1);
+}
+
+/* ======================
    SENDGRID
 ====================== */
 sgMail.setApiKey(SENDGRID_API_KEY);
@@ -56,15 +64,17 @@ cloudinary.config({
 });
 
 /* ======================
-   MULTER (Cloudinary)
+   MULTER + CLOUDINARY
 ====================== */
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
     folder: "minifacebook",
     allowed_formats: ["jpg", "jpeg", "png", "webp"],
+    transformation: [{ quality: "auto" }],
   },
 });
+
 const upload = multer({ storage });
 
 /* ======================
@@ -79,7 +89,7 @@ const db = await mysql.createPool({
 });
 
 /* ======================
-   JWT MIDDLEWARE
+   AUTH MIDDLEWARE
 ====================== */
 function auth(req, res, next) {
   const header = req.headers.authorization;
@@ -100,7 +110,7 @@ function auth(req, res, next) {
 /* ======================
    ROUTES
 ====================== */
-app.get("/", (req, res) => {
+app.get("/", (_, res) => {
   res.sendFile(path.join(__dirname, "public", "login.html"));
 });
 
@@ -108,7 +118,6 @@ app.get("/", (req, res) => {
 app.post("/register", async (req, res) => {
   try {
     const { name, email, password } = req.body;
-
     if (!name || !email || !password) {
       return res.json({ success: false, message: "Completa todos los campos" });
     }
@@ -118,7 +127,7 @@ app.post("/register", async (req, res) => {
       [email]
     );
 
-    if (existing.length > 0 && !existing[0].verified) {
+    if (existing.length && !existing[0].verified) {
       const link = `${BASE_URL}/verify?token=${existing[0].verify_token}`;
       await sgMail.send({
         to: email,
@@ -126,10 +135,10 @@ app.post("/register", async (req, res) => {
         subject: "Verifica tu cuenta",
         html: `<a href="${link}">Verificar cuenta</a>`,
       });
-      return res.json({ success: true, message: "Correo ya registrado" });
+      return res.json({ success: true, message: "Revisa tu correo" });
     }
 
-    if (existing.length > 0) {
+    if (existing.length) {
       return res.json({ success: false, message: "Correo ya registrado" });
     }
 
@@ -151,7 +160,7 @@ app.post("/register", async (req, res) => {
 
     res.json({ success: true, message: "Registro exitoso" });
   } catch (err) {
-    console.error("Register error:", err);
+    console.error("? Register:", err);
     res.status(500).json({ success: false });
   }
 });
@@ -161,7 +170,7 @@ app.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
   const [rows] = await db.query("SELECT * FROM users WHERE email=?", [email]);
-  if (rows.length === 0)
+  if (!rows.length)
     return res.json({ success: false, message: "Usuario no existe" });
 
   if (!rows[0].verified)
@@ -172,28 +181,32 @@ app.post("/login", async (req, res) => {
     return res.json({ success: false, message: "Contraseña incorrecta" });
 
   const token = jwt.sign({ id: rows[0].id }, JWT_SECRET, { expiresIn: "1h" });
-
   res.json({ success: true, token });
 });
 
 /* -------- CREATE POST -------- */
 app.post("/create-post", auth, upload.single("image"), async (req, res) => {
-  const text = req.body.text || null;
-  const image = req.file ? req.file.path : null; // ?? CLOUDINARY URL
+  try {
+    const text = req.body.text || null;
+    const image = req.file?.path || null; // ?? URL CLOUDINARY REAL
 
-  if (!text && !image)
-    return res.json({ success: false, message: "Post vacío" });
+    if (!text && !image)
+      return res.json({ success: false, message: "Post vacío" });
 
-  await db.query(
-    "INSERT INTO posts (user_id, text, image) VALUES (?, ?, ?)",
-    [req.userId, text, image]
-  );
+    await db.query(
+      "INSERT INTO posts (user_id, text, image) VALUES (?, ?, ?)",
+      [req.userId, text, image]
+    );
 
-  res.json({ success: true });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("? Create post:", err);
+    res.status(500).json({ success: false });
+  }
 });
 
 /* -------- GET POSTS -------- */
-app.get("/get-posts", auth, async (req, res) => {
+app.get("/get-posts", auth, async (_, res) => {
   const [posts] = await db.query(`
     SELECT p.text, p.image, p.created_at, u.name
     FROM posts p
@@ -208,5 +221,5 @@ app.get("/get-posts", auth, async (req, res) => {
 ====================== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("?? MiniFacebook corriendo en puerto", PORT);
+  console.log("? MiniFacebook corriendo en puerto", PORT);
 });
