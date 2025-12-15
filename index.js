@@ -188,31 +188,22 @@ app.post("/login", async (req, res) => {
 
 /* -------- CREATE POST -------- */
 app.post("/create-post", auth, upload.single("image"), async (req, res) => {
-  console.log("BODY:", req.body);
-console.log("FILE:", req.file);
+  console.log("BODY:", JSON.stringify(req.body, null, 2));
+  console.log("FILE:", JSON.stringify(req.file, null, 2));
 
-  try {
-    const text = req.body.text || null;
+  const text = req.body.text || null;
+  const image = req.file ? req.file.path : null;
 
-    // ?? AQUÍ ESTABA EL ERROR
-    const image = req.file ? req.file.secure_url : null;
-
-    console.log("FILE:", req.file); // 
-
-    if (!text && !image) {
-      return res.json({ success: false, message: "Post vacío" });
-    }
-
-    await db.query(
-      "INSERT INTO posts (user_id, text, image) VALUES (?, ?, ?)",
-      [req.userId, text, image]
-    );
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error("CREATE POST ERROR:", err);
-    res.status(500).json({ success: false });
+  if (!text && !image) {
+    return res.json({ success: false, message: "Post vacío" });
   }
+
+  await db.query(
+    "INSERT INTO posts (user_id, text, image) VALUES (?, ?, ?)",
+    [req.userId, text, image]
+  );
+
+  res.json({ success: true });
 });
 
 /* -------- GET POSTS -------- */
