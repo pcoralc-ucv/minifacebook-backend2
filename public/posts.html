@@ -15,23 +15,62 @@ body{
   background:rgba(240,242,245,.9);
   min-height:100vh;
 }
-.container{
-  width:600px;
-  margin:auto;
+.layout{
+  display:flex;
+  justify-content:center;
+  gap:20px;
   padding:20px;
 }
+
+/* FEED */
+.feed-container{
+  width:680px;
+}
+
 .post-box,.post{
   background:#fff;
   padding:15px;
   border-radius:10px;
   margin-bottom:15px;
 }
+
+.post img{
+  width:100%;
+  border-radius:8px;
+  margin-top:10px;
+}
+
+/* USUARIOS */
+.users-container{
+  width:260px;
+  background:#fff;
+  border-radius:10px;
+  padding:10px;
+  height:fit-content;
+}
+
+.users-container h4{
+  margin:10px;
+}
+
+.user{
+  padding:8px;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.user:hover{
+  background:#f0f2f5;
+}
+
+/* INPUTS */
 textarea,input{
   width:100%;
   padding:8px;
   margin-top:8px;
   box-sizing:border-box;
 }
+
 button{
   background:#1877f2;
   color:#fff;
@@ -40,16 +79,19 @@ button{
   border-radius:6px;
   cursor:pointer;
 }
+
 .like{
   background:none;
   color:#1877f2;
   font-size:16px;
   margin-top:8px;
 }
+
 .logout{
   background:#e53935;
   float:right;
 }
+
 .comment{
   font-size:13px;
   margin-top:4px;
@@ -59,18 +101,29 @@ button{
 
 <body>
 <div class="overlay">
-<div class="container">
 
-<div class="post-box">
-<button class="logout" onclick="logout()">Salir</button>
-<h3>MiniFacebook</h3>
+<div class="layout">
 
-<textarea id="text" placeholder="¿Qué estás pensando?"></textarea>
-<input id="image" placeholder="URL de imagen (opcional)">
-<button onclick="createPost()">Publicar</button>
-</div>
+  <!-- FEED -->
+  <div class="feed-container">
 
-<div id="feed"></div>
+    <div class="post-box">
+      <button class="logout" onclick="logout()">Salir</button>
+      <h3>MiniFacebook</h3>
+
+      <textarea id="text" placeholder="¿Qué estás pensando?"></textarea>
+      <input id="image" placeholder="URL de imagen (opcional)">
+      <button onclick="createPost()">Publicar</button>
+    </div>
+
+    <div id="feed"></div>
+  </div>
+
+  <!-- USUARIOS -->
+  <div class="users-container">
+    <h4>Contactos</h4>
+    <div id="users"></div>
+  </div>
 
 </div>
 </div>
@@ -79,11 +132,13 @@ button{
 const token = localStorage.getItem("token");
 if(!token) location.href="/login.html";
 
+/* LOGOUT */
 function logout(){
   localStorage.removeItem("token");
   location.href="/login.html";
 }
 
+/* CREAR POST */
 function createPost(){
   fetch("/create-post",{
     method:"POST",
@@ -102,6 +157,7 @@ function createPost(){
   });
 }
 
+/* LIKE */
 function toggleLike(id){
   fetch("/like/"+id,{
     method:"POST",
@@ -109,6 +165,7 @@ function toggleLike(id){
   }).then(loadPosts);
 }
 
+/* COMENTAR */
 function addComment(id,input){
   if(!input.value.trim()) return;
 
@@ -119,8 +176,8 @@ function addComment(id,input){
       Authorization:"Bearer "+token
     },
     body:JSON.stringify({
-      postId: id,
-      text: input.value
+      postId:id,
+      text:input.value
     })
   }).then(()=>{
     input.value="";
@@ -128,47 +185,39 @@ function addComment(id,input){
   });
 }
 
+/* CARGAR COMENTARIOS */
 function loadComments(id){
   fetch("/comments/"+id,{
     headers:{ Authorization:"Bearer "+token }
   })
   .then(r=>r.json())
-  .then(comments=>{
-    const box = document.getElementById("c"+id);
-    box.innerHTML = "";
-
-    comments.forEach(c=>{
-      box.innerHTML += `
-        <div class="comment">
-          <b>${c.name}:</b> ${c.text}
-        </div>
-      `;
+  .then(c=>{
+    const box=document.getElementById("c"+id);
+    box.innerHTML="";
+    c.forEach(x=>{
+      box.innerHTML+=`<div class="comment"><b>${x.name}:</b> ${x.comment}</div>`;
     });
   });
 }
 
+/* CARGAR POSTS */
 function loadPosts(){
-  fetch("/get-posts",{
-    headers:{ Authorization:"Bearer "+token }
-  })
+  fetch("/get-posts",{ headers:{ Authorization:"Bearer "+token }})
   .then(r=>r.json())
   .then(posts=>{
     feed.innerHTML="";
-
     posts.forEach(p=>{
       const d=document.createElement("div");
       d.className="post";
       d.innerHTML=`
         <b>${p.name}</b><br>
         <small>${new Date(p.created_at).toLocaleString()}</small>
-        <p>${p.text || ""}</p>
-        ${p.image ? `<img src="${p.image}" style="width:100%;border-radius:8px">` : ""}
-        <button class="like" onclick="toggleLike(${p.id})">
-          👍 ${p.likes}
-        </button>
+        <p>${p.text||""}</p>
+        ${p.image?`<img src="${p.image}">`:""}
+        <button class="like" onclick="toggleLike(${p.id})">👍 ${p.likes}</button>
         <div id="c${p.id}"></div>
         <input placeholder="Comentar..."
-          onkeydown="if(event.key==='Enter') addComment(${p.id},this)">
+          onkeydown="if(event.key==='Enter')addComment(${p.id},this)">
       `;
       feed.appendChild(d);
       loadComments(p.id);
@@ -176,7 +225,27 @@ function loadPosts(){
   });
 }
 
+/* CARGAR USUARIOS */
+function loadUsers(){
+  fetch("/users",{ headers:{ Authorization:"Bearer "+token }})
+  .then(r=>r.json())
+  .then(users=>{
+    usersDiv.innerHTML="";
+    users.forEach(u=>{
+      const d=document.createElement("div");
+      d.className="user";
+      d.innerText=u.name;
+      d.onclick=()=>alert("Chat privado con "+u.name+" (siguiente paso)");
+      usersDiv.appendChild(d);
+    });
+  });
+}
+
+const usersDiv=document.getElementById("users");
+
 loadPosts();
+loadUsers();
 </script>
+
 </body>
 </html>
