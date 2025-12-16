@@ -3,9 +3,6 @@ import mysql from "mysql2/promise";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import sgMail from "@sendgrid/mail";
-import multer from "multer";
-import { CloudinaryStorage } from "multer-storage-cloudinary";
-import { v2 as cloudinary } from "cloudinary";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -36,36 +33,9 @@ const {
   MYSQLPASSWORD,
   MYSQLDATABASE,
   MYSQLPORT,
-  CLOUDINARY_CLOUD_NAME,
-  CLOUDINARY_API_KEY,
-  CLOUDINARY_API_SECRET
 } = process.env;
 
-/* ======================
-   SENDGRID
-====================== */
 sgMail.setApiKey(SENDGRID_API_KEY);
-
-/* ======================
-   CLOUDINARY
-====================== */
-cloudinary.config({
-  cloud_name: CLOUDINARY_CLOUD_NAME,
-  api_key: CLOUDINARY_API_KEY,
-  api_secret: CLOUDINARY_API_SECRET,
-});
-
-/* ======================
-   MULTER → CLOUDINARY
-====================== */
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: "minifacebook",
-    allowed_formats: ["jpg", "jpeg", "png", "webp"],
-  },
-});
-const upload = multer({ storage });
 
 /* ======================
    DB
@@ -106,10 +76,10 @@ app.get("/", (_, res) =>
 app.post("/register", async (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password)
-    return res.json({ success: false, message: "Campos incompletos" });
+    return res.json({ success: false });
 
   const [exists] = await db.query(
-    "SELECT verified, verify_token FROM users WHERE email=?",
+    "SELECT verify_token, verified FROM users WHERE email=?",
     [email]
   );
 
@@ -121,11 +91,10 @@ app.post("/register", async (req, res) => {
       subject: "Verifica tu cuenta",
       html: `<a href="${link}">Verificar cuenta</a>`,
     });
-    return res.json({ success: true, message: "Revisa tu correo" });
+    return res.json({ success: true });
   }
 
-  if (exists.length)
-    return res.json({ success: false, message: "Correo ya registrado" });
+  if (exists.length) return res.json({ success: false });
 
   const hash = await bcrypt.hash(password, 10);
   const token = uuidv4();
@@ -149,21 +118,20 @@ app.post("/register", async (req, res) => {
 /* -------- VERIFY -------- */
 app.get("/verify", async (req, res) => {
   const { token } = req.query;
-  const [r] = await db.query(
+  await db.query(
     "UPDATE users SET verified=1, verify_token=NULL WHERE verify_token=?",
     [token]
   );
-  if (!r.affectedRows) return res.send("Token inválido");
   res.send("Cuenta verificada");
 });
 
 /* -------- LOGIN -------- */
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
-  const [u] = await db.query("SELECT * FROM users WHERE email=?", [email]);
 
-  if (!u.length) return res.json({ success: false });
-  if (!u[0].verified) return res.json({ success: false });
+  const [u] = await db.query("SELECT * FROM users WHERE email=?", [email]);
+  if (!u.length || !u[0].verified)
+    return res.json({ success: false });
 
   const ok = await bcrypt.compare(password, u[0].password);
   if (!ok) return res.json({ success: false });
@@ -172,17 +140,16 @@ app.post("/login", async (req, res) => {
   res.json({ success: true, token });
 });
 
-/* -------- CREATE POST (IMAGEN DESDE PC) -------- */
-app.post("/create-post", auth, upload.single("image"), async (req, res) => {
-  const text = req.body.text || null;
-  const image = req.file ? req.file.path : null; // URL Cloudinary
+/* -------- CREATE POST -------- */
+app.post("/create-post", auth, async (req, res) => {
+  const { text, image } = req.body;
 
   if (!text && !image)
-    return res.json({ success: false, message: "Post vacío" });
+    return res.json({ success: false });
 
   await db.query(
     "INSERT INTO posts (user_id,text,image) VALUES (?,?,?)",
-    [req.userId, text, image]
+    [req.userId, text || null, image || null]
   );
 
   res.json({ success: true });
@@ -202,7 +169,7 @@ app.get("/get-posts", auth, async (req, res) => {
     FROM posts p
     JOIN users u ON u.id=p.user_id
     ORDER BY p.created_at DESC
-    `,
+  `,
     [req.userId]
   );
   res.json(posts);
@@ -222,34 +189,36 @@ app.post("/like/:postId", auth, async (req, res) => {
     return res.json({ liked: false });
   }
 
-  await db.query("INSERT INTO likes (user_id,post_id) VALUES (?,?)", [
-    req.userId,
-    postId,
-  ]);
+  await db.query(
+    "INSERT INTO likes (user_id,post_id) VALUES (?,?)",
+    [req.userId, postId]
+  );
   res.json({ liked: true });
 });
 
 /* -------- COMMENTS -------- */
 app.get("/comments/:postId", auth, async (req, res) => {
-  const [c] = await db.query(
+  const [comments] = await db.query(
     `
-    SELECT c.text,c.created_at,u.name
+    SELECT c.comment, c.created_at, u.name
     FROM comments c
     JOIN users u ON u.id=c.user_id
     WHERE c.post_id=?
     ORDER BY c.created_at
-    `,
+  `,
     [req.params.postId]
   );
-  res.json(c);
+  res.json(comments);
 });
 
 app.post("/comment", auth, async (req, res) => {
   const { postId, text } = req.body;
+
   await db.query(
-    "INSERT INTO comments (user_id,post_id,text) VALUES (?,?,?)",
+    "INSERT INTO comments (user_id,post_id,comment) VALUES (?,?,?)",
     [req.userId, postId, text]
   );
+
   res.json({ success: true });
 });
 
@@ -258,5 +227,5 @@ app.post("/comment", auth, async (req, res) => {
 ====================== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>
-  console.log("MiniFacebook backend listo en puerto", PORT)
+  console.log("MiniFacebook backend corriendo en puerto", PORT)
 );

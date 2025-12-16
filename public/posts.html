@@ -42,7 +42,7 @@ button{
 .like{
   background:none;
   color:#1877f2;
-  font-size:18px;
+  font-size:16px;
 }
 .logout{
   background:#e53935;
@@ -60,7 +60,7 @@ button{
 <h3>MiniFacebook</h3>
 
 <textarea id="text" placeholder="¿Qué estás pensando?"></textarea>
-<input type="file" id="image" accept="image/*">
+<input id="image" placeholder="URL de imagen (opcional)">
 <button onclick="createPost()">Publicar</button>
 </div>
 
@@ -79,15 +79,21 @@ function logout(){
 }
 
 function createPost(){
-  const formData = new FormData();
-  formData.append("text", text.value);
-  if(image.files[0]) formData.append("image", image.files[0]);
-
   fetch("/create-post",{
     method:"POST",
-    headers:{ Authorization:"Bearer "+token },
-    body: formData
-  }).then(()=>{text.value="";image.value="";loadPosts();});
+    headers:{
+      "Content-Type":"application/json",
+      Authorization:"Bearer "+token
+    },
+    body:JSON.stringify({
+      text:text.value,
+      image:image.value
+    })
+  }).then(()=>{
+    text.value="";
+    image.value="";
+    loadPosts();
+  });
 }
 
 function toggleLike(id){
@@ -105,7 +111,10 @@ function addComment(id,input){
       Authorization:"Bearer "+token
     },
     body:JSON.stringify({postId:id,text:input.value})
-  }).then(()=>{input.value="";loadComments(id);});
+  }).then(()=>{
+    input.value="";
+    loadComments(id);
+  });
 }
 
 function loadComments(id){
@@ -115,7 +124,7 @@ function loadComments(id){
   .then(r=>r.json())
   .then(c=>{
     document.getElementById("c"+id).innerHTML =
-      c.map(x=>`<small><b>${x.name}:</b> ${x.text}</small><br>`).join("");
+      c.map(x=>`<small><b>${x.name}:</b> ${x.comment}</small><br>`).join("");
   });
 }
 
@@ -133,7 +142,7 @@ function loadPosts(){
         <p>${p.text||""}</p>
         ${p.image?`<img src="${p.image}" width="100%">`:""}
         <button class="like" onclick="toggleLike(${p.id})">
-          ${p.liked?"👍":"👍"} ${p.likes}
+          👍 ${p.likes}
         </button>
         <div id="c${p.id}"></div>
         <input placeholder="Comentar..."
