@@ -75,6 +75,12 @@
       cursor: pointer;
       color: #1877f2;
     }
+.post-box {
+  position: sticky;
+  top: 20px;
+  z-index: 10;
+}
+
   </style>
 </head>
 
@@ -108,27 +114,29 @@
     window.location.href = "/login.html";
   }
 
-  function createPost() {
-    const text = document.getElementById("text").value;
-    const image = document.getElementById("image").files[0];
-    if (!text && !image) {
-      alert("Escribe algo o sube una imagen");
-      return;
-    }
+function createPost() {
+  const text = document.getElementById("text").value;
 
-    const formData = new FormData();
-    formData.append("text", text);
-    if (image) formData.append("image", image);
-
-    fetch("/create-post", {
-      method: "POST",
-      headers: { Authorization: "Bearer " + token },
-      body: formData,
-    }).then(() => {
-      loadPosts();
-    });
+  if (!text) {
+    alert("Escribe algo");
+    return;
   }
 
+  fetch("/create-post", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + token
+    },
+    body: JSON.stringify({ text })
+  })
+  .then(res => res.json())
+  .then(() => {
+    document.getElementById("text").value = "";
+    loadPosts();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+}
   function loadPosts() {
     fetch("/get-posts", { headers: { Authorization: "Bearer " + token } })
       .then(res => res.json())
