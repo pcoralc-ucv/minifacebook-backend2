@@ -1,9 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>MiniFacebook | Feed</title>
+
+<style>
+body{
+  margin:0;
+  font-family:Arial, Helvetica, sans-serif;
+  background:url("/img/vallejo.jpg") no-repeat center fixed;
+  background-size:cover;
+}
+.overlay{
+  background:rgba(240,242,245,.9);
+  min-height:100vh;
+}
+.layout{
+  display:flex;
+  justify-content:center;
+  gap:20px;
+  padding:20px;
+}
+
+/* FEED */
+.feed-container{
+  width:680px;
+}
+
+.post-box,.post{
+  background:#fff;
+  padding:15px;
+  border-radius:10px;
+  margin-bottom:15px;
+}
+
+.post img{
+  width:100%;
+  border-radius:8px;
+  margin-top:10px;
+}
+
+/* USUARIOS */
+.users-container{
+  width:260px;
+  background:#fff;
+  border-radius:10px;
+  padding:10px;
+  height:fit-content;
+}
+
+.users-container h4{
+  margin:10px;
+}
+
+.user{
+  padding:8px;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.user:hover{
+  background:#f0f2f5;
+}
+
+/* INPUTS */
+textarea,input{
+  width:100%;
+  padding:8px;
+  margin-top:8px;
+  box-sizing:border-box;
+}
+
+button{
+  background:#1877f2;
+  color:#fff;
+  border:none;
+  padding:8px 12px;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.like{
+  background:none;
+  color:#1877f2;
+  font-size:16px;
+  margin-top:8px;
+}
+
+.logout{
+  background:#e53935;
+  float:right;
+}
+
+.comment{
+  font-size:13px;
+  margin-top:4px;
+}
+</style>
+</head>
+
+<body>
+<div class="overlay">
+
+<div class="layout">
+
+  <!-- FEED -->
+  <div class="feed-container">
+
+    <div class="post-box">
+      <button class="logout" onclick="logout()">Salir</button>
+      <h3>MiniFacebook</h3>
+
+      <textarea id="text" placeholder="¿Qué estás pensando?"></textarea>
+      <input id="image" placeholder="URL de imagen (opcional)">
+      <button onclick="createPost()">Publicar</button>
+    </div>
+
+    <div id="feed"></div>
+  </div>
+
+  <!-- USUARIOS -->
+  <div class="users-container">
+    <h4>Contactos</h4>
+    <div id="users"></div>
+  </div>
+
+</div>
+</div>
+
 <script>
 const token = localStorage.getItem("token");
 if(!token) location.href="/login.html";
-
-const usersDiv = document.getElementById("users");
-const feed = document.getElementById("feed");
 
 /* LOGOUT */
 function logout(){
@@ -68,17 +195,14 @@ function loadComments(id){
     const box=document.getElementById("c"+id);
     box.innerHTML="";
     c.forEach(x=>{
-      box.innerHTML+=
-        `<div class="comment"><b>${x.name}:</b> ${x.comment}</div>`;
+      box.innerHTML+=`<div class="comment"><b>${x.name}:</b> ${x.comment}</div>`;
     });
   });
 }
 
 /* CARGAR POSTS */
 function loadPosts(){
-  fetch("/get-posts",{
-    headers:{ Authorization:"Bearer "+token }
-  })
+  fetch("/get-posts",{ headers:{ Authorization:"Bearer "+token }})
   .then(r=>r.json())
   .then(posts=>{
     feed.innerHTML="";
@@ -103,9 +227,7 @@ function loadPosts(){
 
 /* CARGAR USUARIOS */
 function loadUsers(){
-  fetch("/users",{
-    headers:{ Authorization:"Bearer "+token }
-  })
+  fetch("/users",{ headers:{ Authorization:"Bearer "+token }})
   .then(r=>r.json())
   .then(users=>{
     usersDiv.innerHTML="";
@@ -119,6 +241,11 @@ function loadUsers(){
   });
 }
 
+const usersDiv=document.getElementById("users");
+
 loadPosts();
 loadUsers();
 </script>
+
+</body>
+</html>
