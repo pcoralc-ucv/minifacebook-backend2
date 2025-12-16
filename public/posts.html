@@ -1,217 +1,153 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>MiniFacebook | Feed</title>
-  <link rel="stylesheet" href="/css/style.css">
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background: url("/img/vallejo.jpg") no-repeat center center fixed;
-      background-size: cover;
-    }
-    .overlay {
-      min-height: 100vh;
-      background: rgba(240, 242, 245, 0.85);
-      padding: 30px 0;
-    }
-    .container {
-      width: 500px;
-      margin: auto;
-    }
-    .post-box {
-      background: #fff;
-      padding: 15px;
-      border-radius: 10px;
-      margin-bottom: 20px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    }
-    .post-box h3 {
-      margin: 0 0 10px;
-    }
-    textarea {
-      width: 100%;
-      border-radius: 6px;
-      padding: 10px;
-      resize: none;
-      border: 1px solid #ccc;
-      margin-bottom: 10px;
-    }
-    input[type="file"] {
-      margin-bottom: 10px;
-    }
-    button {
-      background: #1877f2;
-      color: #fff;
-      border: none;
-      padding: 8px 14px;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #166fe5;
-    }
-    .logout {
-      background: #e53935;
-      float: right;
-    }
-    .post {
-      background: #fff;
-      padding: 15px;
-      border-radius: 10px;
-      margin-bottom: 15px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    }
-    .post img {
-      width: 100%;
-      border-radius: 8px;
-      margin-top: 10px;
-    }
-    .post small {
-      color: #777;
-    }
-    .like-btn, .comment-btn {
-      cursor: pointer;
-      color: #1877f2;
-    }
-.post-box {
-  position: sticky;
-  top: 20px;
-  z-index: 10;
-}
+<meta charset="UTF-8">
+<title>MiniFacebook | Feed</title>
 
-  </style>
+<style>
+body{
+  margin:0;
+  font-family:Arial;
+  background:url("/img/vallejo.jpg") no-repeat center fixed;
+  background-size:cover;
+}
+.overlay{
+  background:rgba(240,242,245,.9);
+  min-height:100vh;
+}
+.container{
+  width:500px;
+  margin:auto;
+  padding:20px;
+}
+.post-box,.post{
+  background:#fff;
+  padding:15px;
+  border-radius:10px;
+  margin-bottom:15px;
+}
+textarea,input{
+  width:100%;
+  padding:8px;
+  margin-top:8px;
+}
+button{
+  background:#1877f2;
+  color:#fff;
+  border:none;
+  padding:8px 12px;
+  border-radius:6px;
+  cursor:pointer;
+}
+.like{
+  background:none;
+  color:#1877f2;
+  font-size:18px;
+}
+.logout{
+  background:#e53935;
+  float:right;
+}
+</style>
 </head>
 
 <body>
-
 <div class="overlay">
-  <div class="container">
-    <!-- CREAR POST -->
-    <div class="post-box">
-      <button class="logout" onclick="logout()">Salir</button>
-      <h3>MiniFacebook</h3>
+<div class="container">
 
-      <textarea id="text" rows="3" placeholder="¿Qué estás pensando?"></textarea>
-      <input type="file" id="image" name="image" accept="image/*">
-      <button type="button" onclick="createPost()">Publicar</button>
-    </div>
+<div class="post-box">
+<button class="logout" onclick="logout()">Salir</button>
+<h3>MiniFacebook</h3>
 
-    <!-- FEED -->
-    <div id="feed"></div>
-  </div>
+<textarea id="text" placeholder="¿Qué estás pensando?"></textarea>
+<input id="image" placeholder="URL de imagen (opcional)">
+<button onclick="createPost()">Publicar</button>
+</div>
+
+<div id="feed"></div>
+
+</div>
 </div>
 
 <script>
-  const token = localStorage.getItem("token");
-  if (!token) {
-    window.location.href = "/login.html";
-  }
+const token = localStorage.getItem("token");
+if(!token) location.href="/login.html";
 
-  function logout() {
-    localStorage.removeItem("token");
-    window.location.href = "/login.html";
-  }
+function logout(){
+  localStorage.removeItem("token");
+  location.href="/login.html";
+}
 
-function createPost() {
-  const text = document.getElementById("text").value;
-
-  if (!text) {
-    alert("Escribe algo");
-    return;
-  }
-
-  fetch("/create-post", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer " + token
+function createPost(){
+  fetch("/create-post",{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      Authorization:"Bearer "+token
     },
-    body: JSON.stringify({ text })
+    body:JSON.stringify({
+      text:text.value,
+      image:image.value
+    })
+  }).then(()=>{text.value="";image.value="";loadPosts();});
+}
+
+function toggleLike(id){
+  fetch("/like/"+id,{
+    method:"POST",
+    headers:{Authorization:"Bearer "+token}
+  }).then(loadPosts);
+}
+
+function addComment(id,input){
+  fetch("/comment",{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      Authorization:"Bearer "+token
+    },
+    body:JSON.stringify({postId:id,text:input.value})
+  }).then(()=>{input.value="";loadComments(id);});
+}
+
+function loadComments(id){
+  fetch("/comments/"+id,{
+    headers:{Authorization:"Bearer "+token}
   })
-  .then(res => res.json())
-  .then(() => {
-    document.getElementById("text").value = "";
-    loadPosts();
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  .then(r=>r.json())
+  .then(c=>{
+    document.getElementById("c"+id).innerHTML =
+      c.map(x=>`<small><b>${x.name}:</b> ${x.text}</small><br>`).join("");
   });
 }
-  function loadPosts() {
-    fetch("/get-posts", { headers: { Authorization: "Bearer " + token } })
-      .then(res => res.json())
-      .then(posts => {
-        const feed = document.getElementById("feed");
-        feed.innerHTML = "";
-        posts.forEach(p => {
-          const postDiv = document.createElement("div");
-          postDiv.className = "post";
-          postDiv.innerHTML = `
-            <strong>${p.name}</strong>
-            <small>${new Date(p.created_at).toLocaleString()}</small>
-            <p>${p.text || ""}</p>
-            ${p.image ? `<img src="${p.image}">` : ""}
-            <div>
-              <span class="like-btn" onclick="likePost(${p.id})">Like</span> | 
-              <span class="comment-btn" onclick="showComments(${p.id})">Comment</span>
-            </div>
-            <div id="comments-${p.id}"></div>
-            <div id="likes-${p.id}"></div>
-          `;
-          feed.appendChild(postDiv);
-          loadComments(p.id);
-          loadLikes(p.id);
-        });
-      });
-  }
 
-  function likePost(postId) {
-    fetch("/like", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + token,
-      },
-      body: JSON.stringify({ post_id: postId }),
-    }).then(() => loadLikes(postId));
-  }
+function loadPosts(){
+  fetch("/get-posts",{headers:{Authorization:"Bearer "+token}})
+  .then(r=>r.json())
+  .then(posts=>{
+    feed.innerHTML="";
+    posts.forEach(p=>{
+      const d=document.createElement("div");
+      d.className="post";
+      d.innerHTML=`
+        <b>${p.name}</b><br>
+        <small>${new Date(p.created_at).toLocaleString()}</small>
+        <p>${p.text||""}</p>
+        ${p.image?`<img src="${p.image}" width="100%">`:""}
+        <button class="like" onclick="toggleLike(${p.id})">
+          ${p.liked?"??":"??"} ${p.likes}
+        </button>
+        <div id="c${p.id}"></div>
+        <input placeholder="Comentar..."
+          onkeydown="if(event.key==='Enter')addComment(${p.id},this)">
+      `;
+      feed.appendChild(d);
+      loadComments(p.id);
+    });
+  });
+}
 
-  function showComments(postId) {
-    const commentText = prompt("Escribe tu comentario");
-    if (commentText) {
-      fetch("/comment", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + token,
-        },
-        body: JSON.stringify({ post_id: postId, comment: commentText }),
-      }).then(() => loadComments(postId));
-    }
-  }
-
-  function loadComments(postId) {
-    fetch(`/get-comments/${postId}`, { headers: { Authorization: "Bearer " + token } })
-      .then(res => res.json())
-      .then(comments => {
-        const commentDiv = document.getElementById(`comments-${postId}`);
-        commentDiv.innerHTML = comments
-          .map(c => `<div><small>${c.name}: </small>${c.comment}</div>`)
-          .join("");
-      });
-  }
-
-  function loadLikes(postId) {
-    fetch(`/get-likes/${postId}`, { headers: { Authorization: "Bearer " + token } })
-      .then(res => res.json())
-      .then(data => {
-        const likeDiv = document.getElementById(`likes-${postId}`);
-        likeDiv.innerHTML = `${data.total_likes} Likes`;
-      });
-  }
-
-  loadPosts();
+loadPosts();
 </script>
-
 </body>
 </html>
