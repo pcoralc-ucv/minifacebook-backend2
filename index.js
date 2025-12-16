@@ -18,7 +18,6 @@ const __dirname = path.dirname(__filename);
 ====================== */
 const app = express();
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
 /* ======================
@@ -50,7 +49,7 @@ const db = await mysql.createPool({
 });
 
 /* ======================
-   AUTH
+   AUTH MIDDLEWARE
 ====================== */
 function auth(req, res, next) {
   const header = req.headers.authorization;
@@ -73,79 +72,73 @@ app.get("/", (_, res) =>
   res.sendFile(path.join(__dirname, "public", "login.html"))
 );
 
-/* ===== REGISTER ===== */
+/* -------- REGISTER -------- */
 app.post("/register", async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
+  const { name, email, password } = req.body;
 
-    if (!name || !email || !password)
-      return res.json({ success: false, message: "Completa todos los campos" });
+  if (!name || !email || !password)
+    return res.json({ success: false, message: "Campos incompletos" });
 
-    const [exists] = await db.query(
-      "SELECT verified, verify_token FROM users WHERE email=?",
-      [email]
-    );
+  const [exists] = await db.query(
+    "SELECT verified, verify_token FROM users WHERE email=?",
+    [email]
+  );
 
-    if (exists.length && !exists[0].verified) {
-      const link = `${BASE_URL}/verify?token=${exists[0].verify_token}`;
-      await sgMail.send({
-        to: email,
-        from: MAIL_FROM,
-        subject: "Verifica tu cuenta",
-        html: `<a href="${link}">Verificar cuenta</a>`,
-      });
-      return res.json({
-        success: true,
-        message: "Correo ya registrado. Revisa tu email.",
-      });
-    }
-
-    if (exists.length)
-      return res.json({ success: false, message: "Correo ya registrado" });
-
-    const hash = await bcrypt.hash(password, 10);
-    const token = uuidv4();
-
-    await db.query(
-      "INSERT INTO users (name,email,password,verify_token,verified) VALUES (?,?,?,?,0)",
-      [name, email, hash, token]
-    );
-
-    const link = `${BASE_URL}/verify?token=${token}`;
+  if (exists.length && !exists[0].verified) {
+    const link = `${BASE_URL}/verify?token=${exists[0].verify_token}`;
     await sgMail.send({
       to: email,
       from: MAIL_FROM,
-      subject: "Bienvenido a MiniFacebook",
+      subject: "Verifica tu cuenta",
       html: `<a href="${link}">Verificar cuenta</a>`,
     });
-
-    res.json({
-      success: true,
-      message: "Registro exitoso. Revisa tu correo.",
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ success: false, message: "Error servidor" });
+    return res.json({ success: true, message: "Revisa tu correo" });
   }
+
+  if (exists.length)
+    return res.json({ success: false, message: "Correo ya registrado" });
+
+  const hash = await bcrypt.hash(password, 10);
+  const token = uuidv4();
+
+  await db.query(
+    "INSERT INTO users (name,email,password,verify_token,verified) VALUES (?,?,?,?,0)",
+    [name, email, hash, token]
+  );
+
+  const link = `${BASE_URL}/verify?token=${token}`;
+  await sgMail.send({
+    to: email,
+    from: MAIL_FROM,
+    subject: "Bienvenido a MiniFacebook",
+    html: `<a href="${link}">Verificar cuenta</a>`,
+  });
+
+  res.json({ success: true, message: "Registro exitoso, revisa tu correo" });
 });
 
-/* ===== VERIFY ===== */
+/* -------- VERIFY -------- */
 app.get("/verify", async (req, res) => {
   const { token } = req.query;
+
   const [r] = await db.query(
     "UPDATE users SET verified=1, verify_token=NULL WHERE verify_token=?",
     [token]
   );
+
   if (!r.affectedRows) return res.send("Token inválido");
-  res.send("Cuenta verificada. Ya puedes iniciar sesión.");
+
+  res.send("Cuenta verificada, ya puedes iniciar sesión");
 });
 
-/* ===== LOGIN ===== */
+/* -------- LOGIN -------- */
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
   const [u] = await db.query("SELECT * FROM users WHERE email=?", [email]);
-  if (!u.length) return res.json({ success: false, message: "No existe" });
+  if (!u.length)
+    return res.json({ success: false, message: "No existe el usuario" });
+
   if (!u[0].verified)
     return res.json({ success: false, message: "Verifica tu correo" });
 
@@ -157,9 +150,10 @@ app.post("/login", async (req, res) => {
   res.json({ success: true, token });
 });
 
-/* ===== POSTS ===== */
+/* -------- CREATE POST -------- */
 app.post("/create-post", auth, async (req, res) => {
   const { text, image } = req.body;
+
   if (!text && !image)
     return res.json({ success: false, message: "Post vacío" });
 
@@ -167,14 +161,20 @@ app.post("/create-post", auth, async (req, res) => {
     "INSERT INTO posts (user_id,text,image) VALUES (?,?,?)",
     [req.userId, text || null, image || null]
   );
+
   res.json({ success: true });
 });
 
+/* -------- GET POSTS -------- */
 app.get("/get-posts", auth, async (req, res) => {
   const [posts] = await db.query(
     `
     SELECT 
-      p.id,p.text,p.image,p.created_at,u.name,
+      p.id,
+      p.text,
+      p.image,
+      p.created_at,
+      u.name,
       (SELECT COUNT(*) FROM likes WHERE post_id=p.id) AS likes,
       EXISTS(
         SELECT 1 FROM likes 
@@ -183,18 +183,20 @@ app.get("/get-posts", auth, async (req, res) => {
     FROM posts p
     JOIN users u ON u.id=p.user_id
     ORDER BY p.created_at DESC
-  `,
+    `,
     [req.userId]
   );
+
   res.json(posts);
 });
 
-/* ===== LIKES ===== */
-app.post("/like/:id", auth, async (req, res) => {
-  const { id } = req.params;
+/* -------- LIKE -------- */
+app.post("/like/:postId", auth, async (req, res) => {
+  const { postId } = req.params;
+
   const [e] = await db.query(
     "SELECT id FROM likes WHERE user_id=? AND post_id=?",
-    [req.userId, id]
+    [req.userId, postId]
   );
 
   if (e.length) {
@@ -204,33 +206,54 @@ app.post("/like/:id", auth, async (req, res) => {
 
   await db.query("INSERT INTO likes (user_id,post_id) VALUES (?,?)", [
     req.userId,
-    id,
+    postId,
   ]);
+
   res.json({ liked: true });
 });
 
-/* ===== COMMENTS ===== */
-app.get("/comments/:id", auth, async (req, res) => {
-  const [c] = await db.query(
-    `
-    SELECT c.comment AS text, c.created_at, u.name
-    FROM comments c
-    JOIN users u ON u.id=c.user_id
-    WHERE c.post_id=?
-    ORDER BY c.created_at
-  `,
-    [req.params.id]
-  );
-  res.json(c);
+/* -------- GET COMMENTS (ARREGLADO) -------- */
+app.get("/comments/:postId", auth, async (req, res) => {
+  try {
+    const [comments] = await db.query(
+      `
+      SELECT 
+        c.comment AS text,
+        c.created_at,
+        u.name
+      FROM comments c
+      JOIN users u ON u.id = c.user_id
+      WHERE c.post_id = ?
+      ORDER BY c.created_at
+      `,
+      [req.params.postId]
+    );
+
+    res.json(comments);
+  } catch (err) {
+    console.error("ERROR COMMENTS:", err);
+    res.status(500).json([]);
+  }
 });
 
+/* -------- INSERT COMMENT (ARREGLADO) -------- */
 app.post("/comment", auth, async (req, res) => {
-  const { postId, text } = req.body;
-  await db.query(
-    "INSERT INTO comments (user_id,post_id,comment) VALUES (?,?,?)",
-    [req.userId, postId, text]
-  );
-  res.json({ success: true });
+  try {
+    const { postId, text } = req.body;
+
+    if (!postId || !text)
+      return res.json({ success: false });
+
+    await db.query(
+      "INSERT INTO comments (user_id,post_id,comment) VALUES (?,?,?)",
+      [req.userId, postId, text]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("ERROR INSERT COMMENT:", err);
+    res.status(500).json({ success: false });
+  }
 });
 
 /* ======================
@@ -238,5 +261,5 @@ app.post("/comment", auth, async (req, res) => {
 ====================== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>
-  console.log("✅ MiniFacebook backend corriendo en puerto", PORT)
+  console.log("MiniFacebook backend en puerto", PORT)
 );
