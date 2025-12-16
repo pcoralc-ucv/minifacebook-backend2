@@ -3,6 +3,9 @@ import mysql from "mysql2/promise";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import sgMail from "@sendgrid/mail";
+import multer from "multer";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
+import { v2 as cloudinary } from "cloudinary";
 import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -18,7 +21,6 @@ const __dirname = path.dirname(__filename);
 ====================== */
 const app = express();
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
 /* ======================
@@ -34,9 +36,36 @@ const {
   MYSQLPASSWORD,
   MYSQLDATABASE,
   MYSQLPORT,
+  CLOUDINARY_CLOUD_NAME,
+  CLOUDINARY_API_KEY,
+  CLOUDINARY_API_SECRET
 } = process.env;
 
+/* ======================
+   SENDGRID
+====================== */
 sgMail.setApiKey(SENDGRID_API_KEY);
+
+/* ======================
+   CLOUDINARY
+====================== */
+cloudinary.config({
+  cloud_name: CLOUDINARY_CLOUD_NAME,
+  api_key: CLOUDINARY_API_KEY,
+  api_secret: CLOUDINARY_API_SECRET,
+});
+
+/* ======================
+   MULTER → CLOUDINARY
+====================== */
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "minifacebook",
+    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+  },
+});
+const upload = multer({ storage });
 
 /* ======================
    DB
@@ -50,7 +79,7 @@ const db = await mysql.createPool({
 });
 
 /* ======================
-   AUTH
+   AUTH MIDDLEWARE
 ====================== */
 function auth(req, res, next) {
   const header = req.headers.authorization;
@@ -114,7 +143,7 @@ app.post("/register", async (req, res) => {
     html: `<a href="${link}">Verificar cuenta</a>`,
   });
 
-  res.json({ success: true, message: "Registro exitoso" });
+  res.json({ success: true });
 });
 
 /* -------- VERIFY -------- */
@@ -125,30 +154,28 @@ app.get("/verify", async (req, res) => {
     [token]
   );
   if (!r.affectedRows) return res.send("Token inválido");
-  res.send("Cuenta verificada, ya puedes iniciar sesión");
+  res.send("Cuenta verificada");
 });
 
 /* -------- LOGIN -------- */
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
-
   const [u] = await db.query("SELECT * FROM users WHERE email=?", [email]);
-  if (!u.length) return res.json({ success: false, message: "No existe" });
-  if (!u[0].verified)
-    return res.json({ success: false, message: "Verifica tu correo" });
+
+  if (!u.length) return res.json({ success: false });
+  if (!u[0].verified) return res.json({ success: false });
 
   const ok = await bcrypt.compare(password, u[0].password);
-  if (!ok)
-    return res.json({ success: false, message: "Contraseña incorrecta" });
+  if (!ok) return res.json({ success: false });
 
   const token = jwt.sign({ id: u[0].id }, JWT_SECRET, { expiresIn: "1h" });
   res.json({ success: true, token });
 });
 
-/* -------- CREATE POST -------- */
-app.post("/create-post", auth, async (req, res) => {
-  const text = req.body?.text || null;
-  const image = req.body?.image || null;
+/* -------- CREATE POST (IMAGEN DESDE PC) -------- */
+app.post("/create-post", auth, upload.single("image"), async (req, res) => {
+  const text = req.body.text || null;
+  const image = req.file ? req.file.path : null; // URL Cloudinary
 
   if (!text && !image)
     return res.json({ success: false, message: "Post vacío" });
@@ -175,7 +202,7 @@ app.get("/get-posts", auth, async (req, res) => {
     FROM posts p
     JOIN users u ON u.id=p.user_id
     ORDER BY p.created_at DESC
-  `,
+    `,
     [req.userId]
   );
   res.json(posts);
@@ -211,7 +238,7 @@ app.get("/comments/:postId", auth, async (req, res) => {
     JOIN users u ON u.id=c.user_id
     WHERE c.post_id=?
     ORDER BY c.created_at
-  `,
+    `,
     [req.params.postId]
   );
   res.json(c);
@@ -231,5 +258,5 @@ app.post("/comment", auth, async (req, res) => {
 ====================== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () =>
-  console.log("🔥 MiniFacebook backend en puerto", PORT)
+  console.log("MiniFacebook backend listo en puerto", PORT)
 );

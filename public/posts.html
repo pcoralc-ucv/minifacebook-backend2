@@ -7,9 +7,7 @@
 <style>
 body{
   margin:0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont,
-               "Segoe UI", "Apple Color Emoji",
-               "Segoe UI Emoji", sans-serif;
+  font-family:Arial;
   background:url("/img/vallejo.jpg") no-repeat center fixed;
   background-size:cover;
 }
@@ -22,11 +20,6 @@ body{
   margin:auto;
   padding:20px;
 }
-.post-box{
-  position: sticky;
-  top: 10px;
-  z-index: 10;
-}
 .post-box,.post{
   background:#fff;
   padding:15px;
@@ -37,7 +30,6 @@ textarea,input{
   width:100%;
   padding:8px;
   margin-top:8px;
-  box-sizing:border-box;
 }
 button{
   background:#1877f2;
@@ -50,17 +42,11 @@ button{
 .like{
   background:none;
   color:#1877f2;
-  font-size:15px;
-  cursor:pointer;
-  margin-top:5px;
+  font-size:18px;
 }
 .logout{
   background:#e53935;
   float:right;
-}
-.comment{
-  margin-top:5px;
-  font-size:13px;
 }
 </style>
 </head>
@@ -69,13 +55,12 @@ button{
 <div class="overlay">
 <div class="container">
 
-<!-- CREAR POST -->
 <div class="post-box">
 <button class="logout" onclick="logout()">Salir</button>
 <h3>MiniFacebook</h3>
 
 <textarea id="text" placeholder="¿Qué estás pensando?"></textarea>
-<input id="image" placeholder="URL de imagen (opcional)">
+<input type="file" id="image" accept="image/*">
 <button onclick="createPost()">Publicar</button>
 </div>
 
@@ -94,22 +79,15 @@ function logout(){
 }
 
 function createPost(){
+  const formData = new FormData();
+  formData.append("text", text.value);
+  if(image.files[0]) formData.append("image", image.files[0]);
+
   fetch("/create-post",{
     method:"POST",
-    headers:{
-      "Content-Type":"application/json",
-      Authorization:"Bearer "+token
-    },
-    body:JSON.stringify({
-      text:text.value,
-      image:image.value
-    })
-  }).then(()=>{
-    text.value="";
-    image.value="";
-    loadPosts();
-    window.scrollTo({top:0,behavior:"smooth"});
-  });
+    headers:{ Authorization:"Bearer "+token },
+    body: formData
+  }).then(()=>{text.value="";image.value="";loadPosts();});
 }
 
 function toggleLike(id){
@@ -127,10 +105,7 @@ function addComment(id,input){
       Authorization:"Bearer "+token
     },
     body:JSON.stringify({postId:id,text:input.value})
-  }).then(()=>{
-    input.value="";
-    loadComments(id);
-  });
+  }).then(()=>{input.value="";loadComments(id);});
 }
 
 function loadComments(id){
@@ -140,10 +115,7 @@ function loadComments(id){
   .then(r=>r.json())
   .then(c=>{
     document.getElementById("c"+id).innerHTML =
-      c.map(x=>`
-        <div class="comment">
-          <b>${x.name}:</b> ${x.text}
-        </div>`).join("");
+      c.map(x=>`<small><b>${x.name}:</b> ${x.text}</small><br>`).join("");
   });
 }
 
@@ -160,9 +132,9 @@ function loadPosts(){
         <small>${new Date(p.created_at).toLocaleString()}</small>
         <p>${p.text||""}</p>
         ${p.image?`<img src="${p.image}" width="100%">`:""}
-        <div class="like" onclick="toggleLike(${p.id})">
-          &#128077; ${p.likes}
-        </div>
+        <button class="like" onclick="toggleLike(${p.id})">
+          ${p.liked?"👍":"👍"} ${p.likes}
+        </button>
         <div id="c${p.id}"></div>
         <input placeholder="Comentar..."
           onkeydown="if(event.key==='Enter')addComment(${p.id},this)">
