@@ -3,9 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>MiniFacebook | Feed</title>
-
   <link rel="stylesheet" href="/css/style.css">
-
   <style>
     body {
       margin: 0;
@@ -13,35 +11,25 @@
       background: url("/img/vallejo.jpg") no-repeat center center fixed;
       background-size: cover;
     }
-
     .overlay {
       min-height: 100vh;
-      background: rgba(240, 242, 245, 0.88);
+      background: rgba(240, 242, 245, 0.85);
       padding: 30px 0;
     }
-
     .container {
       width: 500px;
       margin: auto;
     }
-
-    /* ===== POST BOX (STICKY) ===== */
     .post-box {
-      position: sticky;
-      top: 20px;
-      z-index: 10;
-
       background: #fff;
       padding: 15px;
       border-radius: 10px;
       margin-bottom: 20px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
-
     .post-box h3 {
       margin: 0 0 10px;
     }
-
     textarea {
       width: 100%;
       border-radius: 6px;
@@ -49,13 +37,10 @@
       resize: none;
       border: 1px solid #ccc;
       margin-bottom: 10px;
-      font-size: 14px;
     }
-
     input[type="file"] {
       margin-bottom: 10px;
     }
-
     button {
       background: #1877f2;
       color: #fff;
@@ -63,25 +48,14 @@
       padding: 8px 14px;
       border-radius: 6px;
       cursor: pointer;
-      font-weight: bold;
     }
-
     button:hover {
       background: #166fe5;
     }
-
     .logout {
       background: #e53935;
       float: right;
     }
-
-    /* ===== FEED ===== */
-    #feed {
-      max-height: calc(100vh - 220px);
-      overflow-y: auto;
-      padding-right: 5px;
-    }
-
     .post {
       background: #fff;
       padding: 15px;
@@ -89,15 +63,17 @@
       margin-bottom: 15px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
-
     .post img {
       width: 100%;
       border-radius: 8px;
       margin-top: 10px;
     }
-
     .post small {
       color: #777;
+    }
+    .like-btn, .comment-btn {
+      cursor: pointer;
+      color: #1877f2;
     }
   </style>
 </head>
@@ -106,29 +82,23 @@
 
 <div class="overlay">
   <div class="container">
-
-    <!-- ===== CREAR POST ===== -->
+    <!-- CREAR POST -->
     <div class="post-box">
       <button class="logout" onclick="logout()">Salir</button>
       <h3>MiniFacebook</h3>
 
-      <textarea id="text" rows="3" placeholder="Â¿QuÃ© estÃ¡s pensando?"></textarea>
-
-      <!-- ðŸ”¥ INPUT CORRECTO -->
+      <textarea id="text" rows="3" placeholder="¿Qué estás pensando?"></textarea>
       <input type="file" id="image" name="image" accept="image/*">
-
       <button type="button" onclick="createPost()">Publicar</button>
     </div>
 
-    <!-- ===== FEED ===== -->
+    <!-- FEED -->
     <div id="feed"></div>
-
   </div>
 </div>
 
 <script>
   const token = localStorage.getItem("token");
-
   if (!token) {
     window.location.href = "/login.html";
   }
@@ -140,9 +110,7 @@
 
   function createPost() {
     const text = document.getElementById("text").value;
-    const imageInput = document.getElementById("image");
-    const image = imageInput.files[0];
-
+    const image = document.getElementById("image").files[0];
     if (!text && !image) {
       alert("Escribe algo o sube una imagen");
       return;
@@ -154,49 +122,84 @@
 
     fetch("/create-post", {
       method: "POST",
-      headers: {
-        Authorization: "Bearer " + token
-      },
-      body: formData
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (!data.success) {
-        alert(data.message || "Error al publicar");
-        return;
-      }
-
-      document.getElementById("text").value = "";
-      imageInput.value = "";
+      headers: { Authorization: "Bearer " + token },
+      body: formData,
+    }).then(() => {
       loadPosts();
-
-      window.scrollTo({ top: 0, behavior: "smooth" });
     });
   }
 
   function loadPosts() {
-    fetch("/get-posts", {
-      headers: {
-        Authorization: "Bearer " + token
-      }
-    })
-    .then(res => res.json())
-    .then(posts => {
-      const feed = document.getElementById("feed");
-      feed.innerHTML = "";
-
-      posts.forEach(p => {
-        const div = document.createElement("div");
-        div.className = "post";
-        div.innerHTML = `
-          <strong>${p.name}</strong><br>
-          <small>${new Date(p.created_at).toLocaleString()}</small>
-          <p>${p.text || ""}</p>
-          ${p.image ? `<img src="${p.image}" />` : ""}
-        `;
-        feed.appendChild(div);
+    fetch("/get-posts", { headers: { Authorization: "Bearer " + token } })
+      .then(res => res.json())
+      .then(posts => {
+        const feed = document.getElementById("feed");
+        feed.innerHTML = "";
+        posts.forEach(p => {
+          const postDiv = document.createElement("div");
+          postDiv.className = "post";
+          postDiv.innerHTML = `
+            <strong>${p.name}</strong>
+            <small>${new Date(p.created_at).toLocaleString()}</small>
+            <p>${p.text || ""}</p>
+            ${p.image ? `<img src="${p.image}">` : ""}
+            <div>
+              <span class="like-btn" onclick="likePost(${p.id})">Like</span> | 
+              <span class="comment-btn" onclick="showComments(${p.id})">Comment</span>
+            </div>
+            <div id="comments-${p.id}"></div>
+            <div id="likes-${p.id}"></div>
+          `;
+          feed.appendChild(postDiv);
+          loadComments(p.id);
+          loadLikes(p.id);
+        });
       });
-    });
+  }
+
+  function likePost(postId) {
+    fetch("/like", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
+      },
+      body: JSON.stringify({ post_id: postId }),
+    }).then(() => loadLikes(postId));
+  }
+
+  function showComments(postId) {
+    const commentText = prompt("Escribe tu comentario");
+    if (commentText) {
+      fetch("/comment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
+        },
+        body: JSON.stringify({ post_id: postId, comment: commentText }),
+      }).then(() => loadComments(postId));
+    }
+  }
+
+  function loadComments(postId) {
+    fetch(`/get-comments/${postId}`, { headers: { Authorization: "Bearer " + token } })
+      .then(res => res.json())
+      .then(comments => {
+        const commentDiv = document.getElementById(`comments-${postId}`);
+        commentDiv.innerHTML = comments
+          .map(c => `<div><small>${c.name}: </small>${c.comment}</div>`)
+          .join("");
+      });
+  }
+
+  function loadLikes(postId) {
+    fetch(`/get-likes/${postId}`, { headers: { Authorization: "Bearer " + token } })
+      .then(res => res.json())
+      .then(data => {
+        const likeDiv = document.getElementById(`likes-${postId}`);
+        likeDiv.innerHTML = `${data.total_likes} Likes`;
+      });
   }
 
   loadPosts();

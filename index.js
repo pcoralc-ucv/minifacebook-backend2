@@ -2,16 +2,11 @@ import express from "express";
 import mysql from "mysql2/promise";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import sgMail from "@sendgrid/mail";
-import multer from "multer";
-import { CloudinaryStorage } from "multer-storage-cloudinary";
-import { v2 as cloudinary } from "cloudinary";
-import { v4 as uuidv4 } from "uuid";
 import path from "path";
 import { fileURLToPath } from "url";
 
 /* ======================
-   __dirname FIX (ESM)
+   __dirname (ESM)
 ====================== */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,46 +22,13 @@ app.use(express.static(path.join(__dirname, "public")));
    ENV
 ====================== */
 const {
-  BASE_URL,
-  SENDGRID_API_KEY,
-  MAIL_FROM,
   JWT_SECRET,
   MYSQLHOST,
   MYSQLUSER,
   MYSQLPASSWORD,
   MYSQLDATABASE,
-  MYSQLPORT,
-  CLOUDINARY_CLOUD_NAME,
-  CLOUDINARY_API_KEY,
-  CLOUDINARY_API_SECRET,
+  MYSQLPORT
 } = process.env;
-
-/* ======================
-   SENDGRID
-====================== */
-sgMail.setApiKey(SENDGRID_API_KEY);
-
-/* ======================
-   CLOUDINARY CONFIG
-====================== */
-cloudinary.config({
-  cloud_name: CLOUDINARY_CLOUD_NAME,
-  api_key: CLOUDINARY_API_KEY,
-  api_secret: CLOUDINARY_API_SECRET,
-});
-
-/* ======================
-   MULTER CLOUDINARY (CORRECTO)
-====================== */
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: "minifacebook",
-    resource_type: "image",
-  },
-});
-
-const upload = multer({ storage });
 
 /* ======================
    DB
@@ -80,11 +42,13 @@ const db = await mysql.createPool({
 });
 
 /* ======================
-   AUTH
+   AUTH MIDDLEWARE
 ====================== */
 function auth(req, res, next) {
   const header = req.headers.authorization;
-  if (!header) return res.status(401).json({ success: false });
+  if (!header) {
+    return res.status(401).json({ success: false });
+  }
 
   try {
     const token = header.split(" ")[1];
@@ -92,95 +56,179 @@ function auth(req, res, next) {
     req.userId = decoded.id;
     next();
   } catch {
-    res.status(401).json({ success: false });
+    return res.status(401).json({ success: false });
   }
 }
 
 /* ======================
    ROUTES
 ====================== */
-app.get("/", (req, res) => {
+
+/* ---------- LOGIN PAGE ---------- */
+app.get("/", (_, res) => {
   res.sendFile(path.join(__dirname, "public", "login.html"));
 });
 
-/* -------- REGISTER -------- */
+/* ---------- REGISTER ---------- */
 app.post("/register", async (req, res) => {
   const { name, email, password } = req.body;
-  const hash = await bcrypt.hash(password, 10);
-  const token = uuidv4();
 
-  await db.query(
-    "INSERT INTO users (name,email,password,verify_token,verified) VALUES (?,?,?,?,0)",
-    [name, email, hash, token]
+  if (!name || !email || !password) {
+    return res.json({ success: false, message: "Completa todo" });
+  }
+
+  const [exists] = await db.query(
+    "SELECT id FROM users WHERE email=?",
+    [email]
   );
 
-  const link = `${BASE_URL}/verify?token=${token}`;
-  await sgMail.send({
-    to: email,
-    from: MAIL_FROM,
-    subject: "Verifica tu cuenta",
-    html: `<a href="${link}">Verificar cuenta</a>`,
-  });
+  if (exists.length > 0) {
+    return res.json({ success: false, message: "Correo ya registrado" });
+  }
+
+  const hash = await bcrypt.hash(password, 10);
+
+  await db.query(
+    "INSERT INTO users (name, email, password) VALUES (?, ?, ?)",
+    [name, email, hash]
+  );
 
   res.json({ success: true });
 });
 
-/* -------- VERIFY -------- */
-app.get("/verify", async (req, res) => {
-  const { token } = req.query;
-  await db.query(
-    "UPDATE users SET verified=1, verify_token=NULL WHERE verify_token=?",
-    [token]
-  );
-  res.send("Cuenta verificada");
-});
-
-/* -------- LOGIN -------- */
+/* ---------- LOGIN ---------- */
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
-  const [u] = await db.query("SELECT * FROM users WHERE email=?", [email]);
-  if (!u.length) return res.json({ success: false });
 
-  const ok = await bcrypt.compare(password, u[0].password);
-  if (!ok) return res.json({ success: false });
+  const [rows] = await db.query(
+    "SELECT * FROM users WHERE email=?",
+    [email]
+  );
 
-  const token = jwt.sign({ id: u[0].id }, JWT_SECRET, { expiresIn: "1h" });
+  if (rows.length === 0) {
+    return res.json({ success: false, message: "No existe" });
+  }
+
+  const ok = await bcrypt.compare(password, rows[0].password);
+  if (!ok) {
+    return res.json({ success: false, message: "Contraseña incorrecta" });
+  }
+
+  const token = jwt.sign(
+    { id: rows[0].id },
+    JWT_SECRET,
+    { expiresIn: "2h" }
+  );
+
   res.json({ success: true, token });
 });
 
-/* -------- CREATE POST -------- */
-app.post("/create-post", auth, upload.single("image"), async (req, res) => {
-  console.log("FILE:", req.file);
+/* ======================
+   POSTS
+====================== */
 
-  const text = req.body.text || null;
-  const image = req.file?.path || null; // ?? CLOUDINARY URL
+/* ---------- CREATE POST ---------- */
+app.post("/create-post", auth, async (req, res) => {
+  const { text } = req.body;
 
-  if (!text && !image) {
+  if (!text) {
     return res.json({ success: false });
   }
 
   await db.query(
-    "INSERT INTO posts (user_id,text,image) VALUES (?,?,?)",
-    [req.userId, text, image]
+    "INSERT INTO posts (user_id, text) VALUES (?, ?)",
+    [req.userId, text]
   );
 
   res.json({ success: true });
 });
 
-/* -------- GET POSTS -------- */
-app.get("/get-posts", auth, async (req, res) => {
+/* ---------- GET POSTS ---------- */
+app.get("/get-posts", auth, async (_, res) => {
   const [posts] = await db.query(`
-    SELECT p.text, p.image, p.created_at, u.name
+    SELECT 
+      p.id,
+      p.text,
+      p.created_at,
+      u.name,
+      COUNT(l.id) AS likes
     FROM posts p
     JOIN users u ON u.id = p.user_id
+    LEFT JOIN likes l ON l.post_id = p.id
+    GROUP BY p.id
     ORDER BY p.created_at DESC
   `);
+
   res.json(posts);
+});
+
+/* ======================
+   LIKES
+====================== */
+
+/* ---------- TOGGLE LIKE ---------- */
+app.post("/like/:postId", auth, async (req, res) => {
+  const postId = req.params.postId;
+
+  const [exists] = await db.query(
+    "SELECT id FROM likes WHERE user_id=? AND post_id=?",
+    [req.userId, postId]
+  );
+
+  if (exists.length > 0) {
+    await db.query(
+      "DELETE FROM likes WHERE user_id=? AND post_id=?",
+      [req.userId, postId]
+    );
+    return res.json({ liked: false });
+  }
+
+  await db.query(
+    "INSERT INTO likes (user_id, post_id) VALUES (?, ?)",
+    [req.userId, postId]
+  );
+
+  res.json({ liked: true });
+});
+
+/* ======================
+   COMMENTS
+====================== */
+
+/* ---------- ADD COMMENT ---------- */
+app.post("/comment/:postId", auth, async (req, res) => {
+  const { text } = req.body;
+  const postId = req.params.postId;
+
+  if (!text) return res.json({ success: false });
+
+  await db.query(
+    "INSERT INTO comments (user_id, post_id, text) VALUES (?, ?, ?)",
+    [req.userId, postId, text]
+  );
+
+  res.json({ success: true });
+});
+
+/* ---------- GET COMMENTS ---------- */
+app.get("/comments/:postId", auth, async (req, res) => {
+  const postId = req.params.postId;
+
+  const [comments] = await db.query(`
+    SELECT c.text, c.created_at, u.name
+    FROM comments c
+    JOIN users u ON u.id = c.user_id
+    WHERE c.post_id=?
+    ORDER BY c.created_at ASC
+  `, [postId]);
+
+  res.json(comments);
 });
 
 /* ======================
    SERVER
 ====================== */
-app.listen(process.env.PORT || 3000, () =>
-  console.log("?? MiniFacebook listo")
-);
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("?? MiniFacebook corriendo en puerto", PORT);
+});
