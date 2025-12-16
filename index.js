@@ -129,10 +129,10 @@ app.post("/login", async (req, res) => {
 
 /* ---------- CREATE POST ---------- */
 app.post("/create-post", auth, async (req, res) => {
-  const { text } = req.body;
+  const text = req.body?.text;
 
   if (!text) {
-    return res.json({ success: false });
+    return res.json({ success: false, message: "Post vacío" });
   }
 
   await db.query(
