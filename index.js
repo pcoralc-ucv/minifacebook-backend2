@@ -61,7 +61,7 @@ function auth(req, res, next) {
     req.userId = decoded.id;
     next();
   } catch {
-    res.status(401).json({ message: "Token inválido" });
+    res.status(401).json({ message: "Token invÃ¡lido" });
   }
 }
 
@@ -123,8 +123,8 @@ app.get("/verify", async (req, res) => {
     "UPDATE users SET verified=1, verify_token=NULL WHERE verify_token=?",
     [token]
   );
-  if (!r.affectedRows) return res.send("Token inválido");
-  res.send("Cuenta verificada, ya puedes iniciar sesión");
+  if (!r.affectedRows) return res.send("Token invÃ¡lido");
+  res.send("Cuenta verificada, ya puedes iniciar sesiÃ³n");
 });
 
 /* -------- LOGIN -------- */
@@ -138,7 +138,7 @@ app.post("/login", async (req, res) => {
 
   const ok = await bcrypt.compare(password, u[0].password);
   if (!ok)
-    return res.json({ success: false, message: "Contraseña incorrecta" });
+    return res.json({ success: false, message: "ContraseÃ±a incorrecta" });
 
   const token = jwt.sign({ id: u[0].id }, JWT_SECRET, { expiresIn: "1h" });
   res.json({ success: true, token });
@@ -149,7 +149,7 @@ app.post("/create-post", auth, async (req, res) => {
   const { text, image } = req.body;
 
   if (!text && !image)
-    return res.json({ success: false, message: "Post vacío" });
+    return res.json({ success: false, message: "Post vacÃ­o" });
 
   await db.query(
     "INSERT INTO posts (user_id,text,image) VALUES (?,?,?)",
